@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+    Options -Indexes
+    RewriteEngine On
+
+    # Block direct access to internal folders, dot files, and project metadata files
+    RewriteRule ^(?:application|system|vendor|tests)\b.* - [F,L]
+    RewriteRule (?:^|/)\. - [F,L]
+    RewriteRule ^(?:composer\.(?:json|lock)|README\.md|license\.txt|phpunit\.xml.*)$ - [F,L,NC]
+
+    # Forward requests to public/ folder if root is used as DocumentRoot
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

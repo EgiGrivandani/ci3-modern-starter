@@ -1,0 +1,33 @@
+.DS_Store
+Thumbs.db
+
+# Environment & Dependencies
+.env
+/vendor/
+
+# Cache & Sessions
+application/cache/*
+!application/cache/index.html
+!application/cache/.htaccess
+!application/cache/sessions/
+application/cache/sessions/*
+!application/cache/sessions/index.html
+!application/cache/sessions/.htaccess
+
+# Logs
+application/logs/*
+!application/logs/index.html
+!application/logs/.htaccess
+
+# Keep .htaccess inside application folders
+!application/*/.htaccess
+
+# IDE & Editor Files
+/nbproject/
+.idea/
+.vscode/
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+*.sublime-workspace
+*.sublime-project
