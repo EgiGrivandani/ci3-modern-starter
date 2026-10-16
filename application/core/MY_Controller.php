@@ -201,7 +201,7 @@ class MY_Controller extends CI_Controller
 		int $decaySeconds = 60,
 		?string $identifier = null
 	): void {
-		$clientKey = $identifier ?? (string) $this->input->ip_address();
+		$clientKey = $identifier ?? (function_exists('client_ip') ? client_ip() : (string) $this->input->ip_address());
 		$limiter   = new RateLimiterService();
 
 		$this->output->set_header('X-RateLimit-Limit: ' . max(1, $maxAttempts));

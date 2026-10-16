@@ -40,3 +40,7 @@ if (!class_exists('CI_Model')) {
 if (!class_exists('MY_Model')) {
 	require_once APPPATH . 'core/MY_Model.php';
 }
+if (!function_exists('resolve_client_ip')) {
+	require_once APPPATH . 'helpers/client_ip_helper.php';
+}
+

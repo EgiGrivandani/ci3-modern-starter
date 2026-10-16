@@ -272,13 +272,13 @@ log_context('error', 'Gagal memproses pembayaran Midtrans', [
 2. **Anti XSS di View**: Setiap pencetakan variabel di file `.php` view **wajib** dibungkus fungsi `<?= e($var) ?>`.
 3. **Proteksi CSRF**: Setiap `<form method="POST">` HTML **wajib** menyertakan `<?= csrf_field() ?>`.
 4. **Password Hashing**: Wajib menggunakan `password_hash($plain, PASSWORD_BCRYPT)` dan `password_verify($plain, $hash)`.
-5. **Rate Limiting (Anti Brute-Force & Spam)**:
+5. **Rate Limiting & Cloudflare Real IP (`client_ip()`)**:
    Endpoint sensitif (Login, Register, OTP, Forgot Password, dan API publik) **wajib** dipasang `$this->throttle($action, $maxAttempts, $decaySeconds)`:
    ```php
    public function login(): void
    {
        try {
-           // Maksimal 5 kali percobaan per 60 detik per IP Address
+           // Maksimal 5 kali percobaan per 60 detik per IP Address (otomatis memakai client_ip())
            $this->throttle('login', 5, 60);
            // ... proses autentikasi
        } catch (Throwable $e) {
@@ -286,7 +286,8 @@ log_context('error', 'Gagal memproses pembayaran Midtrans', [
        }
    }
    ```
-   > Driver penyimpanan Rate Limit diatur melalui `CACHE_DRIVER` di `.env` (`file` secara default, atau ubah ke `redis` / `memcached` / `apcu` untuk skala besar tanpa perlu mengubah kode Controller).
+   > - Driver penyimpanan Rate Limit diatur melalui `CACHE_DRIVER` di `.env` (`file` secara default, atau ubah ke `redis` / `memcached` / `apcu` untuk skala besar tanpa perlu mengubah kode Controller).
+   > - Jika aplikasi berada di balik proxy **Cloudflare**, ubah `TRUST_CLOUDFLARE=true` di `.env`. Fungsi `client_ip()` di `application/helpers/client_ip_helper.php` hanya akan mempercayai header `HTTP_CF_CONNECTING_IP` jika `REMOTE_ADDR` terbukti berasal dari daftar CIDR resmi Cloudflare di `application/config/client_ip.php` (anti IP-spoofing).
 
 
 ---

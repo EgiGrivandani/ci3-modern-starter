@@ -123,4 +123,30 @@ class CoreStandardTest extends TestCase
 			$limiter->clear($key);
 		}
 	}
+
+	public function test_client_ip_helper_resolves_cloudflare_and_blocks_spoofing(): void
+	{
+		$cfRanges = ['173.245.48.0/20', '2400:cb00::/32'];
+
+		// 1. Canonical IPv6 & IPv4-mapped IPv6 normalization
+		$this->assertSame('192.0.2.10', normalize_client_ip('::ffff:192.0.2.10'));
+		$this->assertSame('2001:db8::1', normalize_client_ip('2001:0db8:0000:0000:0000:0000:0000:0001'));
+
+		// 2. Trusted Cloudflare peer extracts HTTP_CF_CONNECTING_IP
+		$trustedServer = [
+			'REMOTE_ADDR'           => '173.245.48.55',
+			'HTTP_CF_CONNECTING_IP' => '203.0.113.99',
+		];
+		$this->assertSame('203.0.113.99', resolve_client_ip($trustedServer, true, $cfRanges));
+
+		// 3. Untrusted direct peer attempting to spoof HTTP_CF_CONNECTING_IP is blocked
+		$spoofedServer = [
+			'REMOTE_ADDR'           => '198.51.100.42',
+			'HTTP_CF_CONNECTING_IP' => '1.1.1.1',
+		];
+		$this->assertSame('198.51.100.42', resolve_client_ip($spoofedServer, true, $cfRanges));
+
+		// 4. When trust_cloudflare is FALSE, REMOTE_ADDR is always used even from Cloudflare IP
+		$this->assertSame('173.245.48.55', resolve_client_ip($trustedServer, false, $cfRanges));
+	}
 }
