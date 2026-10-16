@@ -4,8 +4,10 @@ namespace Tests\Unit;
 
 use App\Exceptions\AppException;
 use App\Exceptions\NotFoundException;
+use App\Exceptions\TooManyRequestsException;
 use App\Exceptions\ValidationException;
 use App\Services\AppInfoService;
+use App\Services\RateLimiterService;
 use PHPUnit\Framework\TestCase;
 use User_model;
 
@@ -77,8 +79,8 @@ class CoreStandardTest extends TestCase
 
 		// Mass-assignment protection ($fillable)
 		$filtered = $userModel->filterFillable([
-			'name'        => 'Budi',
-			'email'       => 'budi@example.com',
+			'name'               => 'Budi',
+			'email'              => 'budi@example.com',
 			'is_superadmin_hack' => 1, // Should be stripped out
 		]);
 
@@ -92,5 +94,33 @@ class CoreStandardTest extends TestCase
 		$this->assertSame(1, $userModel->clampPerPage(-5));
 		$this->assertSame(25, $userModel->clampPerPage(25));
 		$this->assertSame(100, $userModel->clampPerPage(999999));
+	}
+
+	public function test_rate_limiter_enforces_limits_and_resets(): void
+	{
+		$limiter = new RateLimiterService('file');
+		$key     = 'test_login:127.0.0.1';
+		$limiter->clear($key);
+
+		// Attempt 1 & 2 (allowed, max 2)
+		$first = $limiter->attempt($key, 2, 60);
+		$this->assertSame(1, $first['attempts']);
+		$this->assertSame(1, $first['remaining']);
+
+		$second = $limiter->attempt($key, 2, 60);
+		$this->assertSame(2, $second['attempts']);
+		$this->assertSame(0, $second['remaining']);
+
+		// Attempt 3 should throw TooManyRequestsException (HTTP 429)
+		try {
+			$limiter->attempt($key, 2, 60);
+			$this->fail('Expected TooManyRequestsException was not thrown.');
+		} catch (TooManyRequestsException $e) {
+			$this->assertSame(429, $e->getStatusCode());
+			$this->assertSame('TOO_MANY_REQUESTS', $e->getErrorCode());
+			$this->assertGreaterThan(0, $e->getRetryAfter());
+		} finally {
+			$limiter->clear($key);
+		}
 	}
 }

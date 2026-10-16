@@ -189,6 +189,9 @@ class Api_produk extends Public_Controller
     public function store(): void
     {
         try {
+            // Rate Limiting: Maksimal 10 request per 60 detik per IP (mengikuti CACHE_DRIVER di .env: file/redis)
+            $this->throttle('api_produk_store', 10, 60);
+
             // Otomatis memvalidasi body JSON dan melempar ValidationException (422) jika gagal
             $validated = $this->validate([
                 'nama'  => ['label' => 'Nama Produk', 'rules' => 'required|min_length[3]'],

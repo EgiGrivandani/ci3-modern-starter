@@ -272,6 +272,22 @@ log_context('error', 'Gagal memproses pembayaran Midtrans', [
 2. **Anti XSS di View**: Setiap pencetakan variabel di file `.php` view **wajib** dibungkus fungsi `<?= e($var) ?>`.
 3. **Proteksi CSRF**: Setiap `<form method="POST">` HTML **wajib** menyertakan `<?= csrf_field() ?>`.
 4. **Password Hashing**: Wajib menggunakan `password_hash($plain, PASSWORD_BCRYPT)` dan `password_verify($plain, $hash)`.
+5. **Rate Limiting (Anti Brute-Force & Spam)**:
+   Endpoint sensitif (Login, Register, OTP, Forgot Password, dan API publik) **wajib** dipasang `$this->throttle($action, $maxAttempts, $decaySeconds)`:
+   ```php
+   public function login(): void
+   {
+       try {
+           // Maksimal 5 kali percobaan per 60 detik per IP Address
+           $this->throttle('login', 5, 60);
+           // ... proses autentikasi
+       } catch (Throwable $e) {
+           $this->handleException($e); // Otomatis merespons HTTP 429 Too Many Requests
+       }
+   }
+   ```
+   > Driver penyimpanan Rate Limit diatur melalui `CACHE_DRIVER` di `.env` (`file` secara default, atau ubah ke `redis` / `memcached` / `apcu` untuk skala besar tanpa perlu mengubah kode Controller).
+
 
 ---
 

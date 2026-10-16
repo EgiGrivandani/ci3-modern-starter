@@ -2,7 +2,9 @@
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 use App\Exceptions\AppException;
+use App\Exceptions\TooManyRequestsException;
 use App\Exceptions\ValidationException;
+use App\Services\RateLimiterService;
 
 /**
  * Base Application Controller (DDIA & Clean Architecture Ready)
@@ -152,6 +154,10 @@ class MY_Controller extends CI_Controller
 	 */
 	protected function handleException(Throwable $e): void
 	{
+		if ($e instanceof TooManyRequestsException) {
+			$this->output->set_header('Retry-After: ' . $e->getRetryAfter());
+		}
+
 		if ($e instanceof AppException) {
 			$this->error(
 				$e->getMessage(),
@@ -173,6 +179,42 @@ class MY_Controller extends CI_Controller
 			: 'Internal server error. Please contact support with the request_id.';
 
 		$this->error($message, 500, [], 'INTERNAL_SERVER_ERROR');
+	}
+
+	/**
+	 * Protect an endpoint with Rate Limiting (throttling) by action name and IP / custom identifier.
+	 * Uses CACHE_DRIVER from .env ('file', 'redis', 'memcached', 'apcu') with automatic fallback to 'file'.
+	 *
+	 * Example:
+	 *   $this->throttle('login', 5, 60); // Max 5 attempts per 60 seconds
+	 *
+	 * @param string      $action       Action name (e.g. 'login', 'api_public')
+	 * @param int         $maxAttempts  Maximum requests allowed in the window
+	 * @param int         $decaySeconds Window duration in seconds
+	 * @param string|null $identifier   Custom identifier (defaults to client IP address)
+	 * @return void
+	 * @throws TooManyRequestsException
+	 */
+	protected function throttle(
+		string $action = 'global',
+		int $maxAttempts = 60,
+		int $decaySeconds = 60,
+		?string $identifier = null
+	): void {
+		$clientKey = $identifier ?? (string) $this->input->ip_address();
+		$limiter   = new RateLimiterService();
+
+		$this->output->set_header('X-RateLimit-Limit: ' . max(1, $maxAttempts));
+
+		try {
+			$result = $limiter->attempt($action . ':' . $clientKey, $maxAttempts, $decaySeconds);
+			$this->output->set_header('X-RateLimit-Remaining: ' . $result['remaining']);
+		} catch (TooManyRequestsException $e) {
+			$this->output
+				->set_header('X-RateLimit-Remaining: 0')
+				->set_header('Retry-After: ' . $e->getRetryAfter());
+			throw $e;
+		}
 	}
 
 	/**
