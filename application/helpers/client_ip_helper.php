@@ -61,13 +61,18 @@ function resolve_client_ip(array $server, $trust_cloudflare, array $ranges)
 }
 
 /** Visitor IP for rate limits and application audit records. */
-function client_ip()
+function client_ip(): string
 {
     $ci =& get_instance();
     $ci->config->load('client_ip', TRUE);
+
+    /** @var mixed $ranges */
+    $ranges = $ci->config->item('cloudflare_ranges', 'client_ip');
+
     return resolve_client_ip(
         $_SERVER,
-        $ci->config->item('trust_cloudflare', 'client_ip'),
-        $ci->config->item('cloudflare_ranges', 'client_ip')
+        (bool) $ci->config->item('trust_cloudflare', 'client_ip'),
+        is_array($ranges) ? $ranges : []
     );
 }
+
