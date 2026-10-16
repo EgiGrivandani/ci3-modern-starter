@@ -94,6 +94,58 @@ if (!function_exists('csrf_field')) {
 	}
 }
 
+if (!function_exists('request_id')) {
+	/**
+	 * Get or generate a unique correlation ID for the current request (Observability).
+	 *
+	 * @return string
+	 */
+	function request_id(): string
+	{
+		static $reqId = null;
+
+		if ($reqId !== null) {
+			return $reqId;
+		}
+
+		$incoming = $_SERVER['HTTP_X_REQUEST_ID'] ?? '';
+		if (is_string($incoming) && preg_match('/^[a-zA-Z0-9\-_]{8,64}$/', $incoming)) {
+			$reqId = $incoming;
+			return $reqId;
+		}
+
+		try {
+			$reqId = bin2hex(random_bytes(8));
+		} catch (Throwable $e) {
+			$reqId = uniqid('req_', true);
+		}
+
+		return $reqId;
+	}
+}
+
+if (!function_exists('log_context')) {
+	/**
+	 * Write a structured log entry with automatic request_id correlation and JSON context.
+	 *
+	 * @param string               $level   'error'|'debug'|'info'
+	 * @param string               $message
+	 * @param array<string, mixed> $context
+	 * @return void
+	 */
+	function log_context(string $level, string $message, array $context = []): void
+	{
+		if (!function_exists('log_message')) {
+			return;
+		}
+
+		$payload = array_merge(['request_id' => request_id()], $context);
+		$encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+		log_message($level, $message . ' | ' . $encoded);
+	}
+}
+
 if (!function_exists('dump')) {
 	/**
 	 * Dump the passed variables without stopping script execution.
@@ -129,3 +181,4 @@ if (!function_exists('dd')) {
 		exit(1);
 	}
 }
+

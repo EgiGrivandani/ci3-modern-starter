@@ -26,7 +26,8 @@ class AppInfoService
 			'ci_version'  => CI_VERSION,
 			'timezone'    => date_default_timezone_get(),
 			'server_time' => date('Y-m-d H:i:s'),
-			'base_url'    => base_url(),
+			'base_url'    => function_exists('base_url') ? base_url() : env('APP_URL', 'http://localhost/'),
+			'request_id'  => request_id(),
 		];
 	}
 }

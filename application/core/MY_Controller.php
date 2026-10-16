@@ -1,8 +1,11 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+use App\Exceptions\AppException;
+use App\Exceptions\ValidationException;
+
 /**
- * Base Application Controller
+ * Base Application Controller (DDIA & Clean Architecture Ready)
  */
 #[\AllowDynamicProperties]
 class MY_Controller extends CI_Controller
@@ -25,17 +28,19 @@ class MY_Controller extends CI_Controller
 	{
 		parent::__construct();
 		$this->setSecurityHeaders();
-		$this->data['app_name'] = env('APP_NAME', 'CodeIgniter 3');
+		$this->data['app_name']   = env('APP_NAME', 'CodeIgniter 3');
+		$this->data['request_id'] = request_id();
 	}
 
 	/**
-	 * Apply standard HTTP security headers to all responses.
+	 * Apply standard HTTP security headers and X-Request-Id correlation header to all responses.
 	 *
 	 * @return void
 	 */
 	protected function setSecurityHeaders(): void
 	{
 		$this->output
+			->set_header('X-Request-Id: ' . request_id())
 			->set_header('X-Frame-Options: SAMEORIGIN')
 			->set_header('X-Content-Type-Options: nosniff')
 			->set_header('Referrer-Policy: strict-origin-when-cross-origin')
@@ -72,7 +77,7 @@ class MY_Controller extends CI_Controller
 	}
 
 	/**
-	 * Send a JSON response (Laravel-style response()->json()).
+	 * Send a raw JSON response.
 	 *
 	 * @param mixed $payload
 	 * @param int   $statusCode
@@ -84,6 +89,90 @@ class MY_Controller extends CI_Controller
 			->set_status_header($statusCode)
 			->set_content_type('application/json', 'utf-8')
 			->set_output(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+	}
+
+	/**
+	 * Send a standardized JSON success response.
+	 *
+	 * @param mixed                $data
+	 * @param string               $message
+	 * @param int                  $statusCode
+	 * @param array<string, mixed> $meta
+	 * @return void
+	 */
+	protected function success($data = null, string $message = 'OK', int $statusCode = 200, array $meta = []): void
+	{
+		$response = [
+			'status'  => true,
+			'message' => $message,
+			'data'    => $data,
+		];
+
+		if (!empty($meta)) {
+			$response['meta'] = $meta;
+		}
+
+		$this->json($response, $statusCode);
+	}
+
+	/**
+	 * Send a standardized JSON error response with correlation request_id.
+	 *
+	 * @param string               $message
+	 * @param int                  $statusCode
+	 * @param array<string, mixed> $errors
+	 * @param string               $errorCode
+	 * @return void
+	 */
+	protected function error(
+		string $message,
+		int $statusCode = 400,
+		array $errors = [],
+		string $errorCode = 'BAD_REQUEST'
+	): void {
+		$response = [
+			'status'     => false,
+			'error_code' => $errorCode,
+			'message'    => $message,
+			'request_id' => request_id(),
+		];
+
+		if (!empty($errors)) {
+			$response['errors'] = $errors;
+		}
+
+		$this->json($response, $statusCode);
+	}
+
+	/**
+	 * Handle domain or unexpected exceptions and convert them into standardized JSON error responses.
+	 *
+	 * @param Throwable $e
+	 * @return void
+	 */
+	protected function handleException(Throwable $e): void
+	{
+		if ($e instanceof AppException) {
+			$this->error(
+				$e->getMessage(),
+				$e->getStatusCode(),
+				$e->getErrors(),
+				$e->getErrorCode()
+			);
+			return;
+		}
+
+		log_context('error', $e->getMessage(), [
+			'exception' => get_class($e),
+			'file'      => $e->getFile(),
+			'line'      => $e->getLine(),
+		]);
+
+		$message = (ENVIRONMENT === 'development')
+			? $e->getMessage()
+			: 'Internal server error. Please contact support with the request_id.';
+
+		$this->error($message, 500, [], 'INTERNAL_SERVER_ERROR');
 	}
 
 	/**
@@ -100,6 +189,58 @@ class MY_Controller extends CI_Controller
 
 		$decoded = json_decode($raw, true);
 		return is_array($decoded) ? $decoded : [];
+	}
+
+	/**
+	 * Validate input data (POST or custom/JSON array) against CI3 validation rules.
+	 * Throws ValidationException (HTTP 422) on failure, or returns the validated array on success.
+	 *
+	 * Example:
+	 *   $validated = $this->validate([
+	 *       'email' => ['label' => 'Email', 'rules' => 'required|valid_email'],
+	 *       'name'  => ['label' => 'Nama',  'rules' => 'required|min_length[3]'],
+	 *   ], $this->inputJson());
+	 *
+	 * @param array<string, array{label?: string, rules: string}|string> $rules
+	 * @param array<string, mixed>|null                                  $sourceData
+	 * @return array<string, mixed>
+	 * @throws ValidationException
+	 */
+	protected function validate(array $rules, ?array $sourceData = null): array
+	{
+		$this->load->library('form_validation');
+		$this->form_validation->reset_validation();
+
+		$input = $sourceData ?? $this->input->post() ?? [];
+		if ($sourceData !== null) {
+			// Ensure set_data receives a non-empty array or placeholder so CI3 validates $sourceData instead of $_POST
+			$this->form_validation->set_data(empty($sourceData) ? ['__empty__' => null] : $sourceData);
+		}
+
+		$fields = [];
+		foreach ($rules as $field => $config) {
+			$fields[] = $field;
+			if (is_array($config)) {
+				$label     = $config['label'] ?? ucfirst(str_replace('_', ' ', $field));
+				$fieldRule = $config['rules'] ?? 'required';
+			} else {
+				$label     = ucfirst(str_replace('_', ' ', $field));
+				$fieldRule = (string) $config;
+			}
+			$this->form_validation->set_rules($field, $label, $fieldRule);
+		}
+
+		if ($this->form_validation->run() === false) {
+			$errors = $this->form_validation->error_array();
+			throw new ValidationException($errors);
+		}
+
+		$validated = [];
+		foreach ($fields as $field) {
+			$validated[$field] = $input[$field] ?? null;
+		}
+
+		return $validated;
 	}
 }
 
@@ -127,7 +268,7 @@ class Auth_Controller extends MY_Controller
 
 		if (!$this->session->userdata('user_id')) {
 			if ($this->input->is_ajax_request()) {
-				$this->json(['message' => 'Unauthenticated.'], 401);
+				$this->error('Unauthenticated.', 401, [], 'UNAUTHENTICATED');
 				$this->output->_display();
 				exit;
 			}

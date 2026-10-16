@@ -25,10 +25,9 @@ class Welcome extends Public_Controller
 	{
 		$infoService = new AppInfoService();
 
-		$this->json([
-			'status'  => 'ok',
-			'message' => 'CodeIgniter 3 Starter Template is running smoothly on PHP ' . PHP_VERSION,
-			'data'    => $infoService->getSummary(),
-		], 200);
+		$this->success(
+			$infoService->getSummary(),
+			'CodeIgniter 3 Starter Template is running smoothly on PHP ' . PHP_VERSION
+		);
 	}
 }
