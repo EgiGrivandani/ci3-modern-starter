@@ -35,6 +35,7 @@
 		}
 	},
 	"scripts": {
+		"check": "@php scripts/check.php",
 		"test": "phpunit --colors=always",
 		"migrate": "php public/index.php migrate"
 	},

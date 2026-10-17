@@ -123,6 +123,10 @@ $id = $this->userModel->create([
 	</div>
 </div>
 
+<?php if (in_array(ENVIRONMENT, ['development', 'testing'], true)): ?>
+<p style="margin-top:1rem"><a style="color:#fdba74" href="<?= e(site_url('categories')) ?>">Buka contoh CRUD kategori</a></p>
+<?php endif; ?>
+
 <script>
 document.getElementById('btnTestApi')?.addEventListener('click', async function () {
 	const out = document.getElementById('apiOutput');

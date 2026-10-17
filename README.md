@@ -150,6 +150,7 @@ MAIL_FROM_NAME="Nama Aplikasi Anda"
 ```
 
 ### Langkah 4: Aktifkan Database Autoload (Jika Project Memakai Database)
+Contoh CRUD kategori memuat database sendiri, sehingga tidak membutuhkan perubahan autoload. Untuk memuat database pada seluruh controller:
 Buka `application/config/autoload.php` baris 61 dan tambahkan `'database'`:
 ```php
 $autoload['libraries'] = array('database', 'session');
@@ -158,6 +159,24 @@ $autoload['libraries'] = array('database', 'session');
 ### Langkah 5: Jalankan di Laragon / Web Server
 - **Pengguna Laragon**: Klik **Reload** pada Laragon. Laragon otomatis mengenali folder `public/` dan membuat domain `http://nama-project-baru.test/`.
 - **Pengguna `localhost/nama-project-baru`**: Tetap bisa diakses karena file `.htaccess` di root otomatis mengarahkan request ke `public/`.
+
+### Pemeriksaan setup: `composer check`
+
+Jalankan `composer check` setelah mengisi `.env`. Perintah ini memeriksa konfigurasi wajib, ekstensi PHP, izin direktori, driver cache, dan default keamanan production. Hasil `FAIL` menghasilkan exit code `1`; `WARN` menunjukkan hal yang perlu diperhatikan tetapi tidak menggagalkan pemeriksaan. Nilai rahasia tidak dicetak dan tidak ada file atau database yang diubah.
+
+Pemeriksaan memakai PHP CLI dan pengguna terminal. Koneksi database/cache, izin pengguna web server, DocumentRoot, dan penerapan HTTPS tetap perlu diuji pada deployment sebenarnya. `composer check` tidak menggantikan `composer test`.
+
+### Contoh CRUD kategori
+
+1. Buat database kosong untuk proyek ini, lalu sesuaikan `DB_*` di `.env`.
+2. Jalankan `composer check`, kemudian `composer migrate`. Migrasi contoh membuat tabel `categories` dengan nama, deskripsi, dan timestamps.
+3. Buka `/categories` atau tautan dari halaman awal untuk mencoba tambah, edit, hapus, validasi, dan pagination (10 item per halaman).
+
+Alurnya langsung `Categories` → `Category_model` → view, tanpa service tambahan untuk CRUD satu tabel. Nama wajib diisi (maksimal 80 karakter), deskripsi opsional (maksimal 500 karakter). Form memakai CSRF, output di-escape, field yang boleh ditulis dibatasi, dan operasi tulis memakai POST lalu redirect 303. GET tidak dapat menghapus data.
+
+Contoh tersedia hanya pada `APP_ENV=development/testing` karena starter belum menyediakan login. Saat menyalinnya menjadi fitur aplikasi, gunakan autentikasi dan otorisasi proyek sebelum membuka akses production. Untuk menghapus contoh sebelum migrasi pertama, hapus controller `Categories.php`, model `Category_model.php`, folder view `categories/`, migrasi `20261017000000_create_categories.php`, tautan halaman awal, serta `CategoryHttpTest.php` dan router HTTP pengujiannya. Jika migrasi sudah pernah dijalankan pada database bersama, pertahankan riwayatnya dan buat migrasi baru untuk perubahan skema.
+
+`composer test` mencakup alur CRUD melalui server HTTP lokal dan database SQLite sementara, termasuk CSRF, error validasi, output HTML, metode request, pagination, serta rollback migrasi. Tes ini membutuhkan ekstensi `sqlite3` dan `proc_open`; konfigurasi database tes dipisahkan dari database aplikasi.
 
 ---
 
