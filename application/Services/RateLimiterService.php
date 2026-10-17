@@ -7,7 +7,7 @@ use App\Exceptions\RateLimiterUnavailableException;
 use RuntimeException;
 use Throwable;
 
-defined('BASEPATH') OR exit('No direct script access allowed');
+defined('BASEPATH') or exit('No direct script access allowed');
 
 /**
  * Fixed-duration windows starting at the first attempt.

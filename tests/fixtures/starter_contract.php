@@ -6,7 +6,7 @@ $_SERVER['argv'] = $argv = [$argv[0], 'welcome'];
 ob_start();
 require dirname(__DIR__, 2) . '/public/index.php';
 ob_end_clean();
-$ci =& get_instance();
+$ci = & get_instance();
 
 if (str_starts_with($scenario, 'validate')) {
 	$method = new ReflectionMethod(MY_Controller::class, 'validate');
@@ -26,13 +26,20 @@ if (str_starts_with($scenario, 'validate')) {
 } elseif (str_starts_with($scenario, 'csrf')) {
 	$_SERVER['REQUEST_METHOD'] = 'POST';
 	$ci->uri->uri_string = 'api/produk';
-	$security = new class extends CI_Security {
-		public function __construct() {
+	$security = new class () extends CI_Security {
+		public function __construct()
+		{
 			$this->_csrf_token_name = config_item('csrf_token_name');
 			$this->_csrf_cookie_name = config_item('csrf_cookie_name');
 		}
-		public function csrf_set_cookie() { return $this; }
-		public function csrf_show_error() { throw new RuntimeException('CSRF rejected'); }
+		public function csrf_set_cookie()
+		{
+			return $this;
+		}
+		public function csrf_show_error()
+		{
+			throw new RuntimeException('CSRF rejected');
+		}
 	};
 	$_POST = $scenario === 'csrf_valid' ? [config_item('csrf_token_name') => str_repeat('a', 32)] : [];
 	$_COOKIE = [config_item('csrf_cookie_name') => str_repeat('a', 32)];
@@ -55,22 +62,31 @@ if (str_starts_with($scenario, 'validate')) {
 			$db->query("INSERT INTO records VALUES (2, 'rolled back')");
 			throw new RuntimeException('Abort');
 		});
-	} catch (RuntimeException $e) {}
+	} catch (RuntimeException $e) {
+	}
 	try {
 		$ci->User_model->transaction(function () use ($db) {
 			$db->query("INSERT INTO records VALUES (3, 'also rolled back')");
 			// SQLite raises a PHP warning on invalid SQL; suppress only that warning.
 			@$db->query('INSERT INTO missing_table VALUES (1)');
 		});
-	} catch (RuntimeException $e) {}
+	} catch (RuntimeException $e) {
+	}
 	echo json_encode(['rows' => $db->query('SELECT id FROM records')->result_array(), 'debug' => $db->db_debug, 'active' => $db->trans_active()]);
 } elseif ($scenario === 'migrate_zero') {
 	require APPPATH . 'controllers/Migrate.php';
-	$runner = new class extends Migrate {
-		public function __construct() {}
-		protected function initializeMigration(): void {
-			$this->migration = new class {
-				public function version($version) { echo 'TARGET=' . $version . PHP_EOL; return true; }
+	$runner = new class () extends Migrate {
+		public function __construct()
+		{
+		}
+		protected function initializeMigration(): void
+		{
+			$this->migration = new class () {
+				public function version($version)
+				{
+					echo 'TARGET=' . $version . PHP_EOL;
+					return true;
+				}
 			};
 		}
 	};

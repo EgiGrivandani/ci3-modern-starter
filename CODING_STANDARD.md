@@ -1,5 +1,7 @@
 # Standar Programming & Arsitektur (Engineering Standard)
 
+Format mekanis kode mengikuti `.php-cs-fixer.dist.php` (dasar PSR-12 dengan indentasi tab). Jalankan `composer format` sebelum mengirim perubahan. Alur kontribusi dan pemeriksaan otomatis dijelaskan di [CONTRIBUTING.md](CONTRIBUTING.md).
+
 Dokumen ini adalah panduan baku (**Engineering Standard**) untuk seluruh developer yang membangun aplikasi menggunakan **CodeIgniter 3 Modern Starter**. Standar ini memadukan **6 Filosofi Penulisan Kode Pragmatis** dengan **3 Pilar Sistem & Data dari DDIA (*Designing Data-Intensive Applications* — Martin Kleppmann)**.
 
 ---

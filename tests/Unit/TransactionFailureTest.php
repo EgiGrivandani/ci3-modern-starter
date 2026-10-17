@@ -13,7 +13,9 @@ class TransactionFailureTest extends TestCase
 		$model = new \MY_Model();
 		$model->db = $db;
 		try {
-			$model->transaction(function () { $this->fail('Callback must not run.'); });
+			$model->transaction(function () {
+				$this->fail('Callback must not run.');
+			});
 			$this->fail('Expected begin failure.');
 		} catch (\RuntimeException $e) {
 			$this->assertStringContainsString('begin', $e->getMessage());
@@ -29,7 +31,9 @@ class TransactionFailureTest extends TestCase
 		$model = new \MY_Model();
 		$model->db = $db;
 		try {
-			$model->transaction(function () { return 'must not report success'; });
+			$model->transaction(function () {
+				return 'must not report success';
+			});
 			$this->fail('Expected commit failure.');
 		} catch (\RuntimeException $e) {
 			$this->assertStringContainsString('commit', $e->getMessage());
@@ -45,7 +49,9 @@ class TransactionFailureTest extends TestCase
 		$model->db = $db;
 		try {
 			$model->transaction(function () use ($model) {
-				$model->transaction(function () { $this->fail('Inner callback must not run.'); });
+				$model->transaction(function () {
+					$this->fail('Inner callback must not run.');
+				});
 			});
 			$this->fail('Expected nested transaction rejection.');
 		} catch (\LogicException $e) {
@@ -63,7 +69,9 @@ class TransactionFailureTest extends TestCase
 		$model->db = $db;
 		$original = new \RuntimeException('Business operation failed.');
 		try {
-			$model->transaction(function () use ($original) { throw $original; });
+			$model->transaction(function () use ($original) {
+				throw $original;
+			});
 			$this->fail('Expected rollback failure.');
 		} catch (\RuntimeException $e) {
 			$this->assertSame($original, $e->getPrevious());
@@ -82,9 +90,28 @@ class TransactionDatabaseDouble
 	public bool $rollback = true;
 	public bool $active = false;
 	public int $rollbacks = 0;
-	public function trans_active(): bool { return $this->active; }
-	public function trans_begin(): bool { return $this->active = $this->begin; }
-	public function trans_status(): bool { return true; }
-	public function trans_commit(): bool { if ($this->commit) $this->active = false; return $this->commit; }
-	public function trans_rollback(): bool { $this->rollbacks++; $this->active = false; return $this->rollback; }
+	public function trans_active(): bool
+	{
+		return $this->active;
+	}
+	public function trans_begin(): bool
+	{
+		return $this->active = $this->begin;
+	}
+	public function trans_status(): bool
+	{
+		return true;
+	}
+	public function trans_commit(): bool
+	{
+		if ($this->commit) {
+			$this->active = false;
+		} return $this->commit;
+	}
+	public function trans_rollback(): bool
+	{
+		$this->rollbacks++;
+		$this->active = false;
+		return $this->rollback;
+	}
 }

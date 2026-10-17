@@ -45,7 +45,9 @@ class StarterContractTest extends TestCase
 
 	public function test_real_sqlite_transactions_commit_and_roll_back(): void
 	{
-		if (!extension_loaded('sqlite3')) $this->markTestSkipped('SQLite3 is required.');
+		if (!extension_loaded('sqlite3')) {
+			$this->markTestSkipped('SQLite3 is required.');
+		}
 		$result = json_decode($this->scenario('transaction'), true);
 		$this->assertSame([['id' => 1]], $result['rows']);
 		$this->assertTrue($result['debug']);

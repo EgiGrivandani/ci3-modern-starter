@@ -1,5 +1,6 @@
 <?php
-defined('BASEPATH') OR exit('No direct script access allowed');
+
+defined('BASEPATH') or exit('No direct script access allowed');
 
 use App\Exceptions\AppException;
 use App\Exceptions\TooManyRequestsException;

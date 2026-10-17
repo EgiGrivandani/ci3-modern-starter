@@ -21,7 +21,7 @@ class ConfigurationCheckTest extends TestCase
 	{
 		$settings = $this->settings();
 		$checks = (new ConfigurationCheck())->inspect(dirname(__DIR__, 2), $settings);
-		$this->assertSame([], array_values(array_filter($checks, fn($item) => $item['status'] === 'FAIL')));
+		$this->assertSame([], array_values(array_filter($checks, fn ($item) => $item['status'] === 'FAIL')));
 		$this->assertStringNotContainsString($settings['APP_KEY'], json_encode($checks));
 	}
 
@@ -32,7 +32,7 @@ class ConfigurationCheckTest extends TestCase
 			'CSRF_PROTECTION' => false, 'APP_TIMEZONE' => 'invalid', 'TRUST_CLOUDFLARE' => 'maybe',
 		]);
 		$checks = (new ConfigurationCheck())->inspect(dirname(__DIR__, 2), $settings);
-		$messages = implode('\n', array_column(array_filter($checks, fn($item) => $item['status'] === 'FAIL'), 'message'));
+		$messages = implode('\n', array_column(array_filter($checks, fn ($item) => $item['status'] === 'FAIL'), 'message'));
 		foreach (['APP_KEY', 'HTTPS', 'COOKIE_SECURE', 'CSRF_PROTECTION', 'APP_TIMEZONE', 'TRUST_CLOUDFLARE'] as $name) {
 			$this->assertStringContainsString($name, $messages);
 		}
@@ -42,7 +42,7 @@ class ConfigurationCheckTest extends TestCase
 	{
 		$root = sys_get_temp_dir() . '/missing-check-' . bin2hex(random_bytes(8));
 		$checks = (new ConfigurationCheck())->inspect($root, $this->settings());
-		$failures = array_filter($checks, fn($item) => $item['status'] === 'FAIL');
+		$failures = array_filter($checks, fn ($item) => $item['status'] === 'FAIL');
 		$this->assertCount(5, $failures);
 		$this->assertDirectoryDoesNotExist($root);
 	}

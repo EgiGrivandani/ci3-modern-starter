@@ -1,5 +1,6 @@
 <?php
-defined('BASEPATH') OR exit('No direct script access allowed');
+
+defined('BASEPATH') or exit('No direct script access allowed');
 
 use App\Exceptions\ValidationException;
 
@@ -63,7 +64,9 @@ class Categories extends Public_Controller
 				}
 			}
 			try {
-				if ($errors) throw new ValidationException($errors);
+				if ($errors) {
+					throw new ValidationException($errors);
+				}
 				$validated = $this->validate([
 					'name' => ['label' => 'Nama', 'rules' => 'trim|required|max_length[80]'],
 					'description' => ['label' => 'Deskripsi', 'rules' => 'trim|max_length[500]'],
@@ -71,7 +74,9 @@ class Categories extends Public_Controller
 				$saved = $category
 					? $this->categories->update($category->id, $validated)
 					: $this->categories->create($validated);
-				if ($saved === false) $this->writeFailed();
+				if ($saved === false) {
+					$this->writeFailed();
+				}
 				$this->session->set_flashdata('success', 'Kategori berhasil disimpan.');
 				redirect('categories', 'location', 303);
 			} catch (ValidationException $e) {
@@ -91,7 +96,9 @@ class Categories extends Public_Controller
 	{
 		$id = filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 		$category = $id ? $this->categories->find($id) : null;
-		if (!$category) show_404();
+		if (!$category) {
+			show_404();
+		}
 		return $category;
 	}
 

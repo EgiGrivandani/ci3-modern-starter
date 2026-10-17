@@ -1,4 +1,5 @@
 <?php
+
 /**
  * CodeIgniter Front Controller (public/index.php)
  */
@@ -26,12 +27,11 @@ date_default_timezone_set(env('APP_TIMEZONE', 'Asia/Jakarta'));
  */
 define('ENVIRONMENT', env('APP_ENV', env('CI_ENV', 'development')));
 
-switch (ENVIRONMENT)
-{
+switch (ENVIRONMENT) {
 	case 'development':
 		error_reporting(-1);
 		ini_set('display_errors', 1);
-	break;
+		break;
 
 	case 'testing':
 	case 'production':
@@ -41,10 +41,10 @@ switch (ENVIRONMENT)
 		} else {
 			error_reporting(E_ALL & ~E_NOTICE & ~E_DEPRECATED & ~E_STRICT & ~E_USER_NOTICE & ~E_USER_DEPRECATED);
 		}
-	break;
+		break;
 
 	default:
-		header('HTTP/1.1 503 Service Unavailable.', TRUE, 503);
+		header('HTTP/1.1 503 Service Unavailable.', true, 503);
 		echo 'The application environment is not set correctly.';
 		exit(1);
 }
@@ -66,7 +66,7 @@ if (defined('STDIN')) {
 	chdir(dirname(__FILE__));
 }
 
-if (($_temp = realpath($system_path)) !== FALSE) {
+if (($_temp = realpath($system_path)) !== false) {
 	$system_path = $_temp . DIRECTORY_SEPARATOR;
 } else {
 	$system_path = strtr(
@@ -77,7 +77,7 @@ if (($_temp = realpath($system_path)) !== FALSE) {
 }
 
 if (!is_dir($system_path)) {
-	header('HTTP/1.1 503 Service Unavailable.', TRUE, 503);
+	header('HTTP/1.1 503 Service Unavailable.', true, 503);
 	echo 'Your system folder path does not appear to be set correctly. Please open the following file and correct this: ' . pathinfo(__FILE__, PATHINFO_BASENAME);
 	exit(3);
 }
@@ -88,7 +88,7 @@ define('FCPATH', dirname(__FILE__) . DIRECTORY_SEPARATOR);
 define('SYSDIR', basename(BASEPATH));
 
 if (is_dir($application_folder)) {
-	if (($_temp = realpath($application_folder)) !== FALSE) {
+	if (($_temp = realpath($application_folder)) !== false) {
 		$application_folder = $_temp;
 	} else {
 		$application_folder = strtr(
@@ -104,7 +104,7 @@ if (is_dir($application_folder)) {
 		DIRECTORY_SEPARATOR . DIRECTORY_SEPARATOR
 	);
 } else {
-	header('HTTP/1.1 503 Service Unavailable.', TRUE, 503);
+	header('HTTP/1.1 503 Service Unavailable.', true, 503);
 	echo 'Your application folder path does not appear to be set correctly. Please open the following file and correct this: ' . SELF;
 	exit(3);
 }
@@ -114,7 +114,7 @@ define('APPPATH', $application_folder . DIRECTORY_SEPARATOR);
 if (!isset($view_folder[0]) && is_dir(APPPATH . 'views' . DIRECTORY_SEPARATOR)) {
 	$view_folder = APPPATH . 'views';
 } elseif (is_dir($view_folder)) {
-	if (($_temp = realpath($view_folder)) !== FALSE) {
+	if (($_temp = realpath($view_folder)) !== false) {
 		$view_folder = $_temp;
 	} else {
 		$view_folder = strtr(
@@ -130,7 +130,7 @@ if (!isset($view_folder[0]) && is_dir(APPPATH . 'views' . DIRECTORY_SEPARATOR)) 
 		DIRECTORY_SEPARATOR . DIRECTORY_SEPARATOR
 	);
 } else {
-	header('HTTP/1.1 503 Service Unavailable.', TRUE, 503);
+	header('HTTP/1.1 503 Service Unavailable.', true, 503);
 	echo 'Your view folder path does not appear to be set correctly. Please open the following file and correct this: ' . SELF;
 	exit(3);
 }

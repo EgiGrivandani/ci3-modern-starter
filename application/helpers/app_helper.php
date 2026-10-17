@@ -141,7 +141,7 @@ if (!function_exists('csrf_field')) {
 	 */
 	function csrf_field(): string
 	{
-		$ci =& get_instance();
+		$ci = & get_instance();
 		if (!isset($ci->security)) {
 			return '';
 		}
@@ -240,4 +240,3 @@ if (!function_exists('dd')) {
 		exit(1);
 	}
 }
-

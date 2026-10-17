@@ -4,6 +4,8 @@ Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimod
 
 > **📘 Dokumen Standar Programming**: Baca panduan lengkap 6 prinsip penulisan kode, aturan arsitektur 3-Layer, penamaan kode, transaksi database, dan standar API di **[CODING_STANDARD.md](CODING_STANDARD.md)**.
 
+> **Kerja tim & proyek turunan**: Baca [CONTRIBUTING.md](CONTRIBUTING.md) untuk setup anggota tim, penggunaan template, formatter (`composer format` / `composer format:check`), alur branch/PR, dan aturan migrasi. Workflow GitHub Actions ikut tersedia pada setiap repository yang dibuat dari template ini.
+
 ---
 
 ## Daftar Isi

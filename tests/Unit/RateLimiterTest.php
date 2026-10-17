@@ -69,7 +69,8 @@ class RateLimiterTest extends TestCase
 			for ($i = 0; $i < 6; $i++) {
 				$process = proc_open(
 					[PHP_BINARY, dirname(__DIR__) . '/fixtures/rate_limit_worker.php', $this->directory, $gate],
-					[0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes
+					[0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+					$pipes
 				);
 				$this->assertIsResource($process);
 				fclose($pipes[0]);
@@ -94,7 +95,9 @@ class RateLimiterTest extends TestCase
 				if (is_resource($process)) {
 					proc_terminate($process);
 					foreach ($pipes as $pipe) {
-						if (is_resource($pipe)) fclose($pipe);
+						if (is_resource($pipe)) {
+							fclose($pipe);
+						}
 					}
 					proc_close($process);
 				}
@@ -139,14 +142,17 @@ class RateLimiterTest extends TestCase
 
 	private function cacheLimiter(object $cache): RateLimiterService
 	{
-		return new class($cache, $this->directory) extends RateLimiterService {
+		return new class ($cache, $this->directory) extends RateLimiterService {
 			private object $cache;
 			public function __construct(object $cache, string $directory)
 			{
 				parent::__construct('redis', $directory);
 				$this->cache = $cache;
 			}
-			protected function getAtomicCache(): object { return $this->cache; }
+			protected function getAtomicCache(): object
+			{
+				return $this->cache;
+			}
 		};
 	}
 }
@@ -159,25 +165,36 @@ class RateLimitCacheDouble
 	public $beforeWindowAdd;
 	public function get(string $key)
 	{
-		if ($this->failure === 'get') throw new \RuntimeException('Cache offline');
+		if ($this->failure === 'get') {
+			throw new \RuntimeException('Cache offline');
+		}
 		return $this->values[$key] ?? false;
 	}
 	public function add(string $key, $value, int $ttl): bool
 	{
-		if ($this->failure === 'add') return false;
+		if ($this->failure === 'add') {
+			return false;
+		}
 		if (str_ends_with($key, ':window') && $this->beforeWindowAdd !== null) {
 			$callback = $this->beforeWindowAdd;
 			$this->beforeWindowAdd = null;
 			$callback();
 		}
-		if (array_key_exists($key, $this->values)) return false;
+		if (array_key_exists($key, $this->values)) {
+			return false;
+		}
 		$this->values[$key] = $value;
 		return true;
 	}
 	public function increment(string $key)
 	{
-		if ($this->failure === 'increment') return false;
+		if ($this->failure === 'increment') {
+			return false;
+		}
 		return ++$this->values[$key];
 	}
-	public function delete(string $key): void { unset($this->values[$key]); }
+	public function delete(string $key): void
+	{
+		unset($this->values[$key]);
+	}
 }

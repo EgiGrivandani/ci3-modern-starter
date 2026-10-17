@@ -19,7 +19,9 @@ $defaults = [
 	'CACHE_DRIVER' => 'file', 'DB_CONNECTION' => 'mysqli', 'DB_DATABASE' => '',
 ];
 $settings = [];
-foreach ($defaults as $name => $default) $settings[$name] = env($name, $default);
+foreach ($defaults as $name => $default) {
+	$settings[$name] = env($name, $default);
+}
 $failed = false;
 foreach ((new App\Services\ConfigurationCheck())->inspect($root, $settings) as $check) {
 	echo '[' . $check['status'] . '] ' . $check['message'] . PHP_EOL;

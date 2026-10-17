@@ -8,6 +8,7 @@
 		"vlucas/phpdotenv": "^5.6"
 	},
 	"require-dev": {
+		"friendsofphp/php-cs-fixer": "^3.95",
 		"phpunit/phpunit": "^9.6 || ^10.5 || ^11.0"
 	},
 	"autoload": {
@@ -26,6 +27,7 @@
 			"application/language/",
 			"application/libraries/",
 			"application/models/",
+			"application/migrations/",
 			"application/views/"
 		]
 	},
@@ -36,6 +38,8 @@
 	},
 	"scripts": {
 		"check": "@php scripts/check.php",
+		"format": "php-cs-fixer fix --config=.php-cs-fixer.dist.php --sequential --format=txt",
+		"format:check": "php-cs-fixer fix --config=.php-cs-fixer.dist.php --sequential --format=txt --dry-run --diff",
 		"test": "phpunit --colors=always",
 		"migrate": "php public/index.php migrate"
 	},

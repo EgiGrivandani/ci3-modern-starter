@@ -1,4 +1,5 @@
 <?php
+
 /**
  * PHPUnit Bootstrap for CodeIgniter 3 Modern Starter
  *
@@ -43,4 +44,3 @@ if (!class_exists('MY_Model')) {
 if (!function_exists('resolve_client_ip')) {
 	require_once APPPATH . 'helpers/client_ip_helper.php';
 }
-
