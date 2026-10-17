@@ -160,6 +160,8 @@ HTTP Request ──► Controller (HTTP & Validasi) ──► [Service (Opsional
 ### A. Gunakan Database Transaction untuk Multi-Query
 Setiap operasi yang mengubah **lebih dari 1 tabel** **WAJIB** dibungkus dengan `$this->model->transaction()`:
 
+Satu service terluar memiliki transaksi. Helper menolak transaksi bersarang; operasi model di dalam callback menggunakan koneksi yang sama tanpa membuka transaksi lagi. Kegagalan begin, query, commit, atau rollback harus diteruskan sebagai kegagalan operasi.
+
 ```php
 $orderId = $this->orderModel->transaction(function () use ($orderData, $items) {
     $id = $this->orderModel->create($orderData);
@@ -298,7 +300,7 @@ log_context('error', 'Gagal memproses pembayaran Midtrans', [
        }
    }
    ```
-   > - Driver penyimpanan Rate Limit diatur melalui `CACHE_DRIVER` di `.env` (`file` secara default, atau ubah ke `redis` / `memcached` / `apcu` untuk skala besar tanpa perlu mengubah kode Controller).
+   > - Driver Rate Limit diatur melalui `CACHE_DRIVER` di `.env`. `file` memakai lock lokal; `apcu` hanya berbagi counter dalam segmen memori yang sama. Untuk beberapa server, gunakan Redis/Memcached bersama dengan ekstensi PHP yang sesuai. Kegagalan penyimpanan menghasilkan `RateLimiterUnavailableException` (503) melalui `handleException()`, tanpa fallback yang mereset counter. Detail konfigurasi dan batasan ada di README bagian C.
    > - Jika aplikasi berada di balik proxy **Cloudflare**, ubah `TRUST_CLOUDFLARE=true` di `.env`. Fungsi `client_ip()` di `application/helpers/client_ip_helper.php` hanya akan mempercayai header `HTTP_CF_CONNECTING_IP` jika `REMOTE_ADDR` terbukti berasal dari daftar CIDR resmi Cloudflare di `application/config/client_ip.php` (anti IP-spoofing).
 6. **Pemisahan File Upload Publik vs Privat**:
    - **File Publik** (gambar produk, avatar): Simpan di `upload_path('...')` (`public/uploads/`) dan tampilkan dengan `upload_url('...')`. Wajib memvalidasi ekstensi dan MIME type serta mengganti nama file menjadi acak (`encrypt_name = TRUE` di library `upload` CI3).

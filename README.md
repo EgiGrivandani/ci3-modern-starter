@@ -203,13 +203,26 @@ class Produk extends Auth_Controller
 ### C. Standar REST API, Rate Limit, Validasi & Exception Handling
 `MY_Controller` menyediakan method standar `$this->throttle()`, `$this->validate()`, `$this->success()`, `$this->error()`, dan `$this->handleException($e)`.
 
+`validate()` mengembalikan hanya field yang memiliki rule, menggunakan hasil pemrosesan validator (termasuk `trim`). Helper ini mendukung nama field tingkat atas seperti `email`; nama bertingkat seperti `user[email]` atau `items[]` ditolak dengan `InvalidArgumentException`. Untuk struktur bertingkat gunakan library `form_validation` secara langsung dan pilih hasil validasi yang akan diteruskan ke model.
+
 Tersedia juga class Exception siap pakai di `App\Exceptions\`:
 - `ValidationException` (`422 Unprocessable Entity`)
 - `UnauthorizedException` (`401 Unauthorized`)
 - `ForbiddenException` (`403 Forbidden`)
 - `NotFoundException` (`404 Not Found`)
 - `TooManyRequestsException` (`429 Too Many Requests`)
+- `RateLimiterUnavailableException` (`503 Service Unavailable`)
 - `AppException` (`400 Bad Request` atau kode HTTP kustom)
+
+Rate limiter memakai window yang dimulai pada percobaan pertama. Request yang ditolak tetap dihitung, tetapi tidak memperpanjang window. `clear($key)` mereset window tersebut.
+
+- `file`: memakai `flock` untuk menghitung request paralel dan mereset counter. Cocok untuk satu server dengan filesystem lokal; semua worker harus memakai direktori yang sama.
+- `redis` / `memcached`: memakai operasi native add-if-absent dan increment atomik, terpisah dari `CI_Cache`. Membutuhkan ekstensi PHP `redis` / `memcached` dan layanan yang tersedia. Redis memakai konfigurasi `REDIS_*` pada `.env`; Memcached memakai `application/config/memcached.php`. Semua instance aplikasi harus memakai backend yang sama.
+- `apcu`: memakai add-if-absent dan compare-and-swap atomik. Membutuhkan ekstensi APCu aktif; counter hanya dibagi oleh worker yang menggunakan segmen APCu yang sama, bukan antarserver.
+
+Jika penyimpanan gagal dibuka, dibaca, dikunci, atau ditulis, limiter melempar `RateLimiterUnavailableException`. Panggil `throttle()` di dalam blok `try/catch` seperti contoh berikut agar `handleException()` mengirim JSON **503**. Tidak ada fallback otomatis ke file karena perpindahan penyimpanan akan kehilangan counter lama. Batas yang terlampaui tetap menghasilkan **429** dan `Retry-After`.
+
+Backend cache dapat kehilangan counter akibat eviction, flush, atau restart; sediakan kapasitas yang cukup dan hindari menghapus cache limiter saat window aktif. File counter tidak dihapus saat `clear()` agar lock request lain tetap mengacu ke file yang sama. Bersihkan file lama hanya saat worker dihentikan, bukan dengan menghapus file yang mungkin masih dikunci.
 
 ```php
 <?php
@@ -224,11 +237,11 @@ class Api_produk extends Public_Controller
             // Rate Limiting: Maksimal 10 request per 60 detik per IP (mengikuti CACHE_DRIVER di .env: file/redis)
             $this->throttle('api_produk_store', 10, 60);
 
-            // Otomatis memvalidasi body JSON dan melempar ValidationException (422) jika gagal
+            // Form-encoded POST dengan token CSRF; gagal validasi menghasilkan 422
             $validated = $this->validate([
                 'nama'  => ['label' => 'Nama Produk', 'rules' => 'required|min_length[3]'],
                 'harga' => ['label' => 'Harga',       'rules' => 'required|numeric|greater_than[0]'],
-            ], $this->inputJson());
+            ]);
 
             $this->success($validated, 'Produk berhasil disimpan', 201);
         } catch (Throwable $e) {
@@ -241,6 +254,10 @@ class Api_produk extends Public_Controller
 ---
 
 ### D. Model CRUD, Transaction, Locking & Soft Delete (`MY_Model`)
+`transaction()` melempar exception jika transaksi gagal dimulai, query gagal, atau commit gagal. Kegagalan setelah transaksi dimulai memicu satu percobaan rollback; kegagalan rollback juga dilaporkan, dengan exception awal tetap tersedia sebagai penyebab. Mode debug database dimatikan sementara di dalam helper agar error query dapat ditangani, kemudian dipulihkan. Gunakan tabel/engine yang mendukung transaksi; kegagalan koneksi saat commit dapat membuat hasil commit tidak pasti, jadi jangan otomatis mengulang operasi pembayaran tanpa idempotensi.
+
+Transaksi bersarang ditolak dengan `LogicException`. Satu service terluar memiliki transaksi; model/service yang dipanggil di dalamnya cukup menjalankan query pada koneksi yang sama tanpa memanggil `transaction()` lagi.
+
 ```php
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
@@ -294,6 +311,8 @@ php public/index.php migrate version 0
 ```
 *(Controller `Migrate.php` diproteksi dengan `is_cli()` sehingga tidak bisa diakses melalui browser).*
 
+Argumen `version` wajib diisi satu bilangan bulat nonnegatif tanpa tanda atau nol di depan. Argumen kosong/tidak valid menghasilkan petunjuk penggunaan dan exit code `1` sebelum runner memuat database. `version 0` secara eksplisit menjalankan rollback seluruh migrasi; tidak ada default rollback.
+
 ---
 
 ### F. Manajemen File Upload (`storage/private` vs `public/uploads`)
@@ -334,9 +353,11 @@ composer test
 
 ## 6. Standar Keamanan (Security Hardening)
 
-1. **CSRF Protection & Pengecualian REST API (`api/*`)**:
+1. **CSRF Protection**:
    - `CSRF_PROTECTION=true` aktif secara default di `.env`.
-   - Semua route yang diawali `api/` sudah di-whitelist di `$config['csrf_exclude_uris'] = array('api/.*');` pada `application/config/config.php`.
+   - `csrf_exclude_uris` kosong secara default; prefix `/api/` tidak melewati pemeriksaan CSRF. Endpoint berbasis cookie/session tetap membutuhkan perlindungan CSRF.
+   - Pemeriksaan bawaan CI3 memvalidasi token pada POST form-encoded/multipart terhadap cookie. Kirim token menggunakan `csrf_field()` atau field POST bernama sesuai konfigurasi. JSON mentah tidak otomatis dibaca sebagai token CSRF, dan PUT/PATCH/DELETE tidak dilindungi oleh pemeriksaan POST bawaan ini.
+   - Untuk API JSON berbasis token (tanpa autentikasi cookie) atau webhook, tambahkan pengecualian URI yang spesifik hanya setelah autentikasi token/verifikasi signature diterapkan. Untuk JSON atau metode lain yang tetap memakai session, implementasikan pemeriksaan CSRF yang sesuai terlebih dahulu; jangan mengecualikan seluruh `api/.*`.
 2. **Cloudflare Real IP Anti-Spoofing (`TRUST_CLOUDFLARE`)**:
    - Jika domain menggunakan proxy Cloudflare, ubah `TRUST_CLOUDFLARE=true` di `.env`. Helper `client_ip()` hanya akan membaca `HTTP_CF_CONNECTING_IP` jika `REMOTE_ADDR` terbukti berasal dari daftar CIDR resmi Cloudflare di `application/config/client_ip.php`.
 3. **Production Deployment Checklist**:

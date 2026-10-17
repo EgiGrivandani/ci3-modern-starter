@@ -183,7 +183,8 @@ class MY_Controller extends CI_Controller
 
 	/**
 	 * Protect an endpoint with Rate Limiting (throttling) by action name and IP / custom identifier.
-	 * Uses CACHE_DRIVER from .env ('file', 'redis', 'memcached', 'apcu') with automatic fallback to 'file'.
+	 * Uses CACHE_DRIVER from .env ('file', 'redis', 'memcached', 'apcu').
+	 * Storage failure throws RateLimiterUnavailableException (503), without switching stores.
 	 *
 	 * Example:
 	 *   $this->throttle('login', 5, 60); // Max 5 attempts per 60 seconds
@@ -250,14 +251,19 @@ class MY_Controller extends CI_Controller
 	 */
 	protected function validate(array $rules, ?array $sourceData = null): array
 	{
+		// This convenience wrapper supports top-level fields only. Reject unsupported
+		// bracket paths instead of returning null or exposing unvalidated siblings.
+		foreach ($rules as $field => $rule) {
+			if (!is_string($field) || $field === '' || strpbrk($field, '[]') !== false) {
+				throw new InvalidArgumentException('validate() requires top-level field names; use form_validation directly for nested fields.');
+			}
+		}
 		$this->load->library('form_validation');
 		$this->form_validation->reset_validation();
 
 		$input = $sourceData ?? $this->input->post() ?? [];
-		if ($sourceData !== null) {
-			// Ensure set_data receives a non-empty array or placeholder so CI3 validates $sourceData instead of $_POST
-			$this->form_validation->set_data(empty($sourceData) ? ['__empty__' => null] : $sourceData);
-		}
+		// A non-empty array prevents CI from falling back to unrelated $_POST data.
+		$this->form_validation->set_data(empty($input) ? ['__empty__' => null] : $input);
 
 		$fields = [];
 		foreach ($rules as $field => $config) {
@@ -272,14 +278,15 @@ class MY_Controller extends CI_Controller
 			$this->form_validation->set_rules($field, $label, $fieldRule);
 		}
 
-		if ($this->form_validation->run() === false) {
+		$processed = [];
+		if ($this->form_validation->run(null, $processed) === false) {
 			$errors = $this->form_validation->error_array();
 			throw new ValidationException($errors);
 		}
 
 		$validated = [];
 		foreach ($fields as $field) {
-			$validated[$field] = $input[$field] ?? null;
+			$validated[$field] = $processed[$field] ?? null;
 		}
 
 		return $validated;

@@ -3,19 +3,16 @@
 namespace App\Services;
 
 use App\Exceptions\TooManyRequestsException;
+use App\Exceptions\RateLimiterUnavailableException;
+use RuntimeException;
 use Throwable;
 
 defined('BASEPATH') OR exit('No direct script access allowed');
 
 /**
- * Multi-Driver Rate Limiter Service (DDIA Load Shedding & Brute-Force Protection)
- *
- * Supports:
- * - 'file' (default, zero-dependency atomic flock storage in application/cache/ratelimit/)
- * - 'redis', 'memcached', 'apcu' (via CodeIgniter's CI_Cache driver)
- *
- * Automatically degrades gracefully to atomic 'file' driver if the primary cache server
- * (e.g. Redis) is unreachable, ensuring rate limiting stays active without crashing the app.
+ * Fixed-duration windows starting at the first attempt.
+ * File storage uses flock; native caches use add-if-absent and atomic increments.
+ * Storage failures stop the request with HTTP 503; counters never silently switch stores.
  */
 class RateLimiterService
 {
@@ -73,152 +70,125 @@ class RateLimiterService
 	 */
 	public function clear(string $key): void
 	{
-		$safeKey = 'rl_' . md5($key);
-
-		if ($this->driver !== 'file') {
-			try {
-				$cache = $this->getCiCache();
-				if ($cache !== null) {
-					$cache->delete($safeKey);
-					return;
-				}
-			} catch (Throwable $e) {
-				// Fall through to file cleanup
+		try {
+			$safeKey = 'rl_' . md5($key);
+			if ($this->driver === 'file') {
+				// Keep the same inode: unlinking would split locks held by waiting workers.
+				$this->withFileLock($safeKey, function ($fp): void {
+					$this->writeState($fp, ['attempts' => 0, 'reset_at' => 0]);
+				});
+			} else {
+				$this->getAtomicCache()->delete($safeKey . ':window');
 			}
-		}
-
-		$filePath = $this->storageDir . DIRECTORY_SEPARATOR . $safeKey . '.json';
-		if (is_file($filePath)) {
-			@unlink($filePath);
+		} catch (Throwable $e) {
+			$this->storageFailure($e);
 		}
 	}
 
-	/**
-	 * Record a hit in the configured storage driver (with automatic safe fallback to file).
-	 *
-	 * @param string $safeKey
-	 * @param int    $decaySeconds
-	 * @return array{attempts: int, reset_at: int}
-	 */
 	protected function hit(string $safeKey, int $decaySeconds): array
 	{
-		if ($this->driver !== 'file') {
-			try {
-				$cache = $this->getCiCache();
-				if ($cache !== null) {
-					return $this->hitViaCacheDriver($cache, $safeKey, $decaySeconds);
-				}
-			} catch (Throwable $e) {
-				log_context('error', 'RateLimiter cache driver failed, falling back to file storage.', [
-					'driver' => $this->driver,
-					'error'  => $e->getMessage(),
-				]);
+		try {
+			if ($this->driver !== 'file') {
+				return $this->hitViaCacheDriver($this->getAtomicCache(), $safeKey, $decaySeconds);
 			}
+			return $this->hitViaFile($safeKey, $decaySeconds);
+		} catch (Throwable $e) {
+			$this->storageFailure($e);
 		}
-
-		return $this->hitViaFile($safeKey, $decaySeconds);
 	}
 
-	/**
-	 * Store and increment counter using CI_Cache (redis / memcached / apcu).
-	 *
-	 * @param object $cache
-	 * @param string $safeKey
-	 * @param int    $decaySeconds
-	 * @return array{attempts: int, reset_at: int}
-	 */
+	protected function storageFailure(Throwable $e): void
+	{
+		log_context('error', 'Rate limiter storage failed.', ['driver' => $this->driver, 'error' => $e->getMessage()]);
+		throw new RateLimiterUnavailableException($e);
+	}
+
 	protected function hitViaCacheDriver(object $cache, string $safeKey, int $decaySeconds): array
 	{
-		$now  = time();
-		$data = $cache->get($safeKey);
-
-		if (!is_array($data) || !isset($data['attempts'], $data['reset_at']) || $data['reset_at'] <= $now) {
-			$state = [
-				'attempts' => 1,
-				'reset_at' => $now + $decaySeconds,
-			];
-			$cache->save($safeKey, $state, $decaySeconds);
-			return $state;
+		$windowKey = $safeKey . ':window';
+		$raw = $cache->get($windowKey);
+		if ($raw === false) {
+			// Create the counter BEFORE publishing the window. Only the add winner's
+			// token is used; losing candidates expire automatically.
+			$state = ['token' => bin2hex(random_bytes(16)), 'reset_at' => time() + $decaySeconds];
+			if (!$cache->add($safeKey . ':' . $state['token'], 0, $decaySeconds + 1)) {
+				throw new RuntimeException('Cannot initialize rate limit counter.');
+			}
+			$raw = json_encode($state, JSON_THROW_ON_ERROR);
+			if (!$cache->add($windowKey, $raw, $decaySeconds)) {
+				$raw = $cache->get($windowKey);
+			}
 		}
-
-		$data['attempts'] = (int) $data['attempts'] + 1;
-		$ttl = max(1, (int) $data['reset_at'] - $now);
-		$cache->save($safeKey, $data, $ttl);
-
-		return [
-			'attempts' => $data['attempts'],
-			'reset_at' => (int) $data['reset_at'],
-		];
+		$state = is_string($raw) ? json_decode($raw, true) : null;
+		if (!is_array($state) || !isset($state['token'], $state['reset_at'])
+			|| !is_string($state['token']) || !preg_match('/^[a-f0-9]{32}$/D', $state['token'])
+			|| !is_int($state['reset_at']) || $state['reset_at'] < 1) {
+			throw new RuntimeException('Rate limit window is unavailable or invalid.');
+		}
+		$attempts = $cache->increment($safeKey . ':' . $state['token']);
+		if (!is_int($attempts) || $attempts < 1) {
+			throw new RuntimeException('Cannot increment rate limit counter.');
+		}
+		return ['attempts' => $attempts, 'reset_at' => $state['reset_at']];
 	}
 
-	/**
-	 * Store and increment counter using atomic file locking (flock).
-	 *
-	 * @param string $safeKey
-	 * @param int    $decaySeconds
-	 * @return array{attempts: int, reset_at: int}
-	 */
 	protected function hitViaFile(string $safeKey, int $decaySeconds): array
 	{
-		if (!is_dir($this->storageDir)) {
-			@mkdir($this->storageDir, 0755, true);
-		}
-
-		$filePath = $this->storageDir . DIRECTORY_SEPARATOR . $safeKey . '.json';
-		$now      = time();
-		$fp       = @fopen($filePath, 'c+');
-
-		if ($fp === false) {
-			return ['attempts' => 1, 'reset_at' => $now + $decaySeconds];
-		}
-
-		$state = ['attempts' => 1, 'reset_at' => $now + $decaySeconds];
-
-		if (flock($fp, LOCK_EX)) {
-			$raw     = stream_get_contents($fp);
-			$decoded = is_string($raw) && $raw !== '' ? json_decode($raw, true) : null;
-
-			if (is_array($decoded) && isset($decoded['attempts'], $decoded['reset_at']) && $decoded['reset_at'] > $now) {
-				$state = [
-					'attempts' => (int) $decoded['attempts'] + 1,
-					'reset_at' => (int) $decoded['reset_at'],
-				];
+		return $this->withFileLock($safeKey, function ($fp) use ($decaySeconds): array {
+			$now = time(); // Read the clock after acquiring the lock.
+			$raw = stream_get_contents($fp);
+			if ($raw === false) {
+				throw new RuntimeException('Cannot read rate limit file.');
 			}
-
-			ftruncate($fp, 0);
-			rewind($fp);
-			fwrite($fp, (string) json_encode($state));
-			fflush($fp);
-			flock($fp, LOCK_UN);
-		}
-
-		fclose($fp);
-		return $state;
+			$state = ['attempts' => 0, 'reset_at' => $now + $decaySeconds];
+			if ($raw !== '') {
+				$decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+				if (!is_array($decoded) || !isset($decoded['attempts'], $decoded['reset_at'])
+					|| !is_int($decoded['attempts']) || $decoded['attempts'] < 0 || !is_int($decoded['reset_at'])) {
+					throw new RuntimeException('Invalid rate limit file.');
+				}
+				if ($decoded['reset_at'] > $now) {
+					$state = $decoded;
+				}
+			}
+			$state['attempts']++;
+			$this->writeState($fp, $state);
+			return $state;
+		});
 	}
 
-	/**
-	 * Resolve CodeIgniter's CI_Cache instance if available in HTTP runtime.
-	 *
-	 * @return object|null
-	 */
-	protected function getCiCache(): ?object
+	protected function withFileLock(string $safeKey, callable $callback)
 	{
-		if (!function_exists('get_instance')) {
-			return null;
+		if (!is_dir($this->storageDir) && !@mkdir($this->storageDir, 0755, true) && !is_dir($this->storageDir)) {
+			throw new RuntimeException('Cannot create rate limit directory.');
 		}
-
-		$ci =& get_instance();
-		if (!is_object($ci) || !isset($ci->load)) {
-			return null;
+		$fp = @fopen($this->storageDir . DIRECTORY_SEPARATOR . $safeKey . '.json', 'c+');
+		if ($fp === false) {
+			throw new RuntimeException('Cannot open rate limit file.');
 		}
-
-		if (!isset($ci->cache)) {
-			$ci->load->driver('cache', [
-				'adapter' => $this->driver,
-				'backup'  => 'file',
-			]);
+		try {
+			if (!flock($fp, LOCK_EX)) {
+				throw new RuntimeException('Cannot lock rate limit file.');
+			}
+			return $callback($fp);
+		} finally {
+			flock($fp, LOCK_UN);
+			fclose($fp);
 		}
+	}
 
-		return $ci->cache ?? null;
+	protected function writeState($fp, array $state): void
+	{
+		$json = json_encode($state, JSON_THROW_ON_ERROR);
+		// Overwrite before truncating so a failed write is not mistaken for a new counter.
+		if (!rewind($fp) || fwrite($fp, $json) !== strlen($json)
+			|| !ftruncate($fp, strlen($json)) || !fflush($fp)) {
+			throw new RuntimeException('Cannot persist rate limit counter.');
+		}
+	}
+
+	protected function getAtomicCache(): object
+	{
+		return new AtomicRateLimitCache($this->driver);
 	}
 }

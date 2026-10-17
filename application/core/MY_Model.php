@@ -65,6 +65,7 @@ class MY_Model extends CI_Model
 	/**
 	 * Execute a callback inside an atomic database transaction.
 	 * Automatically commits on success or rolls back on query failure / exception.
+	 * Nested transactions are rejected; the outer service owns the transaction.
 	 *
 	 * @param callable $callback
 	 * @return mixed
@@ -72,21 +73,38 @@ class MY_Model extends CI_Model
 	 */
 	public function transaction(callable $callback)
 	{
-		$this->db->trans_begin();
-
+		if ($this->db->trans_active()) {
+			throw new LogicException('Nested transactions are not supported. Use the existing outer transaction.');
+		}
+		// CI's debug mode can terminate execution on a query error, bypassing catch/finally.
+		$debug = $this->db->db_debug;
+		$this->db->db_debug = false;
 		try {
-			$result = $callback($this);
-
-			if ($this->db->trans_status() === false) {
-				$this->db->trans_rollback();
-				throw new RuntimeException('Database transaction failed.');
+			if (!$this->db->trans_begin()) {
+				throw new RuntimeException('Could not begin database transaction.');
 			}
-
-			$this->db->trans_commit();
-			return $result;
-		} catch (Throwable $e) {
-			$this->db->trans_rollback();
-			throw $e;
+			try {
+				$result = $callback($this);
+				if ($this->db->trans_status() === false) {
+					throw new RuntimeException('Database transaction failed.');
+				}
+				if (!$this->db->trans_commit()) {
+					throw new RuntimeException('Could not commit database transaction.');
+				}
+				return $result;
+			} catch (Throwable $e) {
+				try {
+					if (!$this->db->trans_rollback()) {
+						throw new RuntimeException('Rollback returned false.');
+					}
+				} catch (Throwable $rollbackError) {
+					log_context('error', 'Database rollback failed.', ['error' => $rollbackError->getMessage()]);
+					throw new RuntimeException('Database transaction failed and rollback could not be confirmed.', 0, $e);
+				}
+				throw $e;
+			}
+		} finally {
+			$this->db->db_debug = $debug;
 		}
 	}
 
