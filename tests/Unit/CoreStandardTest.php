@@ -3,8 +3,10 @@
 namespace Tests\Unit;
 
 use App\Exceptions\AppException;
+use App\Exceptions\ForbiddenException;
 use App\Exceptions\NotFoundException;
 use App\Exceptions\TooManyRequestsException;
+use App\Exceptions\UnauthorizedException;
 use App\Exceptions\ValidationException;
 use App\Services\AppInfoService;
 use App\Services\RateLimiterService;
@@ -34,6 +36,20 @@ class CoreStandardTest extends TestCase
 		$malicious = '<script>alert("xss")</script>';
 		$this->assertSame('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;', e($malicious));
 		$this->assertSame('', e(null));
+	}
+
+	public function test_storage_and_upload_path_helpers_resolve_correctly(): void
+	{
+		$this->assertDirectoryExists(storage_path());
+		$this->assertDirectoryExists(upload_path());
+		$this->assertStringEndsWith(
+			'storage' . DIRECTORY_SEPARATOR . 'private' . DIRECTORY_SEPARATOR . 'ktp' . DIRECTORY_SEPARATOR . 'doc.pdf',
+			storage_path('ktp/doc.pdf')
+		);
+		$this->assertStringEndsWith(
+			'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'avatars' . DIRECTORY_SEPARATOR . 'pic.jpg',
+			upload_path('avatars/pic.jpg')
+		);
 	}
 
 	public function test_request_id_is_consistent_within_request(): void
@@ -71,6 +87,14 @@ class CoreStandardTest extends TestCase
 		$this->assertSame(404, $notFoundEx->getStatusCode());
 		$this->assertSame('RESOURCE_NOT_FOUND', $notFoundEx->getErrorCode());
 		$this->assertSame('User tidak ditemukan.', $notFoundEx->getMessage());
+
+		$unauthorizedEx = new UnauthorizedException();
+		$this->assertSame(401, $unauthorizedEx->getStatusCode());
+		$this->assertSame('UNAUTHORIZED', $unauthorizedEx->getErrorCode());
+
+		$forbiddenEx = new ForbiddenException();
+		$this->assertSame(403, $forbiddenEx->getStatusCode());
+		$this->assertSame('FORBIDDEN', $forbiddenEx->getErrorCode());
 	}
 
 	public function test_model_fillable_protection_and_pagination_clamping(): void

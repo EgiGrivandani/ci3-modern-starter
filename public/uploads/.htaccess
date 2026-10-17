@@ -1,0 +1,28 @@
+# Disable directory browsing and CGI script execution
+Options -Indexes -ExecCGI
+
+# Disable PHP execution inside public uploads directory (Apache mod_php)
+<IfModule mod_php.c>
+	php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+	php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+	php_flag engine off
+</IfModule>
+
+# Block access to any executable scripts or active HTML/SVG files (Anti-RCE & Anti-XSS)
+<FilesMatch "\.(?i:php|php[0-9]|phtml|phar|inc|pl|py|cgi|sh|bash|exe|bat|cmd|asp|aspx|jsp|htaccess|htpasswd|ini|conf|env|sql|html|htm|shtml|svg|js|mjs)$">
+	<IfModule authz_core_module>
+		Require all denied
+	</IfModule>
+	<IfModule !authz_core_module>
+		Deny from all
+	</IfModule>
+</FilesMatch>
+
+# Force safe Content-Disposition / nosniff for uploaded media
+<IfModule mod_headers.c>
+	Header set X-Content-Type-Options "nosniff"
+</IfModule>

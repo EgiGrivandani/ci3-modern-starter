@@ -2,7 +2,7 @@
 
 Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimodifikasi dengan struktur, fitur, keamanan modern bergaya **Laravel**, serta fondasi **Engineering Standard berbasis DDIA (*Designing Data-Intensive Applications*) & Clean Architecture**. Template ini dirancang dengan prinsip **Reliable, Scalable, Maintainable, Clean, dan Secure**, serta kompatibel penuh dengan **PHP 8.0 hingga PHP 8.5+**.
 
-> **📘 Dokumen Standar Programming**: Baca panduan lengkap aturan arsitektur 3-Layer, penamaan kode, transaksi database, dan standar API di **[CODING_STANDARD.md](CODING_STANDARD.md)**.
+> **📘 Dokumen Standar Programming**: Baca panduan lengkap 6 prinsip penulisan kode, aturan arsitektur 3-Layer, penamaan kode, transaksi database, dan standar API di **[CODING_STANDARD.md](CODING_STANDARD.md)**.
 
 ---
 
@@ -14,11 +14,13 @@ Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimod
 5. [Panduan Cara Pakai (Cheat Sheet)](#5-panduan-cara-pakai-cheat-sheet)
    - [A. Konfigurasi `.env` & Fungsi `env()`](#a-konfigurasi-env--fungsi-env)
    - [B. Membuat Controller & Master Layout (`MY_Controller`)](#b-membuat-controller--master-layout-my_controller)
-   - [C. Standar REST API, Validasi Input & Exception Handling](#c-standar-rest-api-validasi-input--exception-handling)
+   - [C. Standar REST API, Rate Limit, Validasi & Exception Handling](#c-standar-rest-api-rate-limit-validasi--exception-handling)
    - [D. Model CRUD, Transaction, Locking & Soft Delete (`MY_Model`)](#d-model-crud-transaction-locking--soft-delete-my_model)
-   - [E. Membuat Class PSR-4 Modern (`App\Services\...`)](#e-membuat-class-psr-4-modern-appservices)
-   - [F. Helper Global (`e()`, `csrf_field()`, `asset()`, `request_id()`, `log_context()`, `dd()`)](#f-helper-global-e-csrf_field-asset-request_id-log_context-dd)
-   - [G. Menjalankan Unit Test (PHPUnit)](#g-menjalankan-unit-test-phpunit)
+   - [E. Database Migration via CLI (`composer migrate`)](#e-database-migration-via-cli-composer-migrate)
+   - [F. Manajemen File Upload (`storage/private` vs `public/uploads`)](#f-manajemen-file-upload-storageprivate-vs-publicuploads)
+   - [G. Membuat Class PSR-4 Modern (`App\Services\...`)](#g-membuat-class-psr-4-modern-appservices)
+   - [H. Helper Global (`e()`, `csrf_field()`, `asset()`, `client_ip()`, `request_id()`, `log_context()`, `dd()`)](#h-helper-global-e-csrf_field-asset-client_ip-request_id-log_context-dd)
+   - [I. Menjalankan Unit Test (PHPUnit)](#i-menjalankan-unit-test-phpunit)
 6. [Standar Keamanan (Security Hardening)](#6-standar-keamanan-security-hardening)
 
 ---
@@ -29,12 +31,15 @@ Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimod
 | :--- | :--- | :--- |
 | **Versi PHP** | Maksimal PHP 7.4 / 8.0 | **PHP 8.0 s/d PHP 8.5+** (PocketARC v3.4.5) |
 | **Web Root (`index.php`)** | Di root folder (rawan terekspos) | Terpisah di dalam folder **`public/`** (seperti Laravel) |
-| **Konfigurasi Environment** | Hardcode di `config.php` & `database.php` | Menggunakan file **`.env`** (`vlucas/phpdotenv`) + fungsi `env()` |
-| **Base Controller** | Langsung `extends CI_Controller` | `MY_Controller`, `Public_Controller`, & `Auth_Controller` + `validate()`, `success()`, `error()`, `handleException()` |
+| **Konfigurasi Environment** | Hardcode di `config.php`, `database.php`, `email.php` | Menggunakan file **`.env`** (`vlucas/phpdotenv`) + fungsi `env()` |
+| **Base Controller** | Langsung `extends CI_Controller` | `MY_Controller`, `Public_Controller`, & `Auth_Controller` + `validate()`, `throttle()`, `success()`, `error()`, `handleException()` |
 | **Sistem Layout View** | Panggil `header`, `content`, `footer` berulang-ulang | Cukup 1 baris: `$this->renderLayout('nama_view', $data)` |
 | **Base Model (DDIA Ready)** | Tulis query manual di tiap model | `MY_Model` dengan CRUD, Safe `paginate()`, `transaction()`, `findForUpdate()`, `insertBatch()`, `$softDeletes`, `$fillable`, & `timestamps` |
+| **Rate Limiter & Real IP** | Tidak tersedia | Multi-driver (`file`, `redis`, `memcached`, `apcu`) via `$this->throttle()` + verifikasi CIDR Cloudflare di `client_ip()` |
+| **Database Migration CLI** | Harus buat controller manual | Siap pakai via CLI: `composer migrate` atau `php public/index.php migrate` |
+| **File Storage & Uploads** | Campur di root folder | Terpisah antara **`storage/private/`** (`storage_path()`) dan **`public/uploads/`** (`upload_path()`, anti-RCE `.htaccess`) |
 | **Autoloading Class** | Wajib `$this->load->library()` | Mendukung **Composer PSR-4 (`App\`)** untuk `application/Services/`, `application/Exceptions/`, dll. |
-| **Observability & Helper** | `var_dump(); die;` & `log_message()` polos | Tersedia **`request_id()`**, **`log_context()`**, **`e()`**, **`csrf_field()`**, **`asset()`**, **`dd()`**, dan **`dump()`** |
+| **Observability & Helper** | `var_dump(); die;` & `log_message()` polos | Tersedia **`request_id()`**, **`log_context()`**, **`client_ip()`**, **`e()`**, **`csrf_field()`**, **`asset()`**, **`dd()`**, dan **`dump()`** |
 | **Unit Testing** | Tidak tersedia / sulit dikonfigurasi | Siap pakai dengan **PHPUnit** (`composer test`) di folder `tests/Unit/` |
 
 ---
@@ -55,24 +60,29 @@ Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimod
 project-root/
 ├── application/
 │   ├── cache/
-│   │   └── sessions/          # Lokasi penyimpanan file session (terisolasi & aman)
-│   ├── config/                # Konfigurasi CI3 (otomatis membaca nilai dari .env)
-│   ├── controllers/           # Controller aplikasi (contoh: Welcome.php)
+│   │   └── sessions/          # Lokasi penyimpanan file session & rate limit (terisolasi & aman)
+│   ├── config/                # Konfigurasi CI3 (database, email, redis, client_ip, migration otomatis dari .env)
+│   ├── controllers/           # Controller aplikasi (Welcome.php, Migrate.php untuk CLI)
 │   ├── core/
-│   │   ├── MY_Controller.php  # Base Controller (Layout, Standard JSON API, Validation, Exception Handler)
+│   │   ├── MY_Controller.php  # Base Controller (Layout, JSON API, Throttle, Validation, Exception Handler)
 │   │   └── MY_Model.php       # Base Model (CRUD, Transaction, Locking, Soft Delete, Safe Pagination)
-│   ├── Exceptions/            # Custom Domain Exceptions PSR-4 (AppException, ValidationException, NotFoundException)
+│   ├── Exceptions/            # Custom Domain Exceptions PSR-4 (400, 401, 403, 404, 422, 429)
 │   ├── helpers/
-│   │   └── app_helper.php     # Fungsi global: env(), e(), asset(), csrf_field(), request_id(), log_context(), dump(), dd()
+│   │   ├── app_helper.php       # Helper global: env(), e(), asset(), storage_path(), upload_path(), request_id(), log_context(), dd()
+│   │   └── client_ip_helper.php # Helper pencari IP asli pengunjung & verifikasi CIDR Cloudflare: client_ip()
+│   ├── migrations/            # File migrasi skema database (YYYYMMDDHHIISS_nama_migrasi.php)
 │   ├── models/                # Model database (contoh: User_model.php)
-│   ├── Services/              # Tempat membuat class Business Logic PSR-4 (namespace App\Services)
+│   ├── Services/              # Class Business Logic PSR-4 (AppInfoService, RateLimiterService)
 │   └── views/
 │       ├── layouts/           # Master template layout (contoh: main.php)
 │       └── welcome_message.php
 ├── public/                    # DOCUMENT ROOT (Apache/Nginx/Laragon mengarah ke sini)
-│   ├── assets/                # Taruh file CSS, JS, Gambar di dalam public/assets/
+│   ├── assets/                # File statis CSS, JS, Gambar bawaan tema -> diakses via asset()
+│   ├── uploads/               # File upload publik (foto produk, avatar) -> diakses via upload_path() & upload_url()
 │   ├── .htaccess              # Rewrite URL (hapus index.php) & Security Headers
 │   └── index.php              # Entry point utama yang bersih & ringkas
+├── storage/
+│   └── private/               # File upload rahasia/privat (KTP, invoice) di luar public/ -> diakses via storage_path()
 ├── system/                    # Core CodeIgniter 3.4.5 (Jangan diubah)
 ├── tests/                     # Unit Test PHPUnit
 │   ├── bootstrap.php          # Bootstrapper CI3 + .env untuk testing
@@ -81,7 +91,7 @@ project-root/
 ├── .env                       # File konfigurasi lokal (TIDAK di-commit ke Git)
 ├── .env.example               # Template konfigurasi environment
 ├── CODING_STANDARD.md         # Panduan Standar Programming & Arsitektur (DDIA)
-├── composer.json              # Konfigurasi dependency, PSR-4 ("App\\"), & script "composer test"
+├── composer.json              # Konfigurasi dependency, PSR-4 ("App\\"), script "composer test" & "composer migrate"
 └── phpunit.xml                # Konfigurasi PHPUnit
 ```
 
@@ -111,9 +121,16 @@ APP_ENV=development
 APP_KEY=isi_dengan_32_karakter_acak_rahasia
 APP_URL=http://nama-project-baru.test/
 APP_TIMEZONE=Asia/Jakarta
+LOG_THRESHOLD=1
 
 CSRF_PROTECTION=true
 COOKIE_SECURE=false
+TRUST_CLOUDFLARE=false
+
+CACHE_DRIVER=file
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
 
 DB_CONNECTION=mysqli
 DB_HOST=127.0.0.1
@@ -121,6 +138,15 @@ DB_PORT=3306
 DB_DATABASE=nama_database
 DB_USERNAME=root
 DB_PASSWORD=
+
+MAIL_MAILER=smtp
+MAIL_HOST=127.0.0.1
+MAIL_PORT=2525
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS="hello@example.com"
+MAIL_FROM_NAME="Nama Aplikasi Anda"
 ```
 
 ### Langkah 4: Aktifkan Database Autoload (Jika Project Memakai Database)
@@ -174,14 +200,20 @@ class Produk extends Auth_Controller
 
 ---
 
-### C. Standar REST API, Validasi Input & Exception Handling
-`MY_Controller` menyediakan method standar `$this->success()`, `$this->error()`, `$this->validate()`, dan `$this->handleException($e)`:
+### C. Standar REST API, Rate Limit, Validasi & Exception Handling
+`MY_Controller` menyediakan method standar `$this->throttle()`, `$this->validate()`, `$this->success()`, `$this->error()`, dan `$this->handleException($e)`.
+
+Tersedia juga class Exception siap pakai di `App\Exceptions\`:
+- `ValidationException` (`422 Unprocessable Entity`)
+- `UnauthorizedException` (`401 Unauthorized`)
+- `ForbiddenException` (`403 Forbidden`)
+- `NotFoundException` (`404 Not Found`)
+- `TooManyRequestsException` (`429 Too Many Requests`)
+- `AppException` (`400 Bad Request` atau kode HTTP kustom)
 
 ```php
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
-
-use App\Exceptions\NotFoundException;
 
 class Api_produk extends Public_Controller
 {
@@ -251,22 +283,48 @@ $this->userModel->insertBatch([
 
 ---
 
-### E. Membuat Class PSR-4 Modern (`App\Services\...`)
+### E. Database Migration via CLI (`composer migrate`)
+Simpan file migrasi bertipe *timestamp* (`YYYYMMDDHHIISS_nama_migrasi.php`) di dalam `application/migrations/`, lalu jalankan dari terminal:
+```powershell
+# Menjalankan semua migrasi terbaru
+composer migrate
+
+# Atau rollback / pindah ke versi tertentu (0 untuk reset)
+php public/index.php migrate version 0
+```
+*(Controller `Migrate.php` diproteksi dengan `is_cli()` sehingga tidak bisa diakses melalui browser).*
+
+---
+
+### F. Manajemen File Upload (`storage/private` vs `public/uploads`)
+Starter ini memisahkan lokasi penyimpanan file sesuai tingkat kerahasiaannya:
+1. **File Publik (`public/uploads/`)**: Untuk gambar produk, avatar, atau banner yang boleh diakses via URL. Dilindungi `.htaccess` anti-RCE (memblokir eksekusi `.php`, `.html`, `.svg`, `.js`).
+   - Path server: `upload_path('avatars/user-1.jpg')`
+   - URL publik: `upload_url('avatars/user-1.jpg')`
+2. **File Privat/Sensitif (`storage/private/`)**: Berada **di luar folder `public/`** untuk dokumen rahasia (foto KTP, bukti transfer, PDF invoice). Tidak memiliki URL publik langsung dan hanya bisa diunduh melalui Controller yang mengecek hak akses.
+   - Path server: `storage_path('ktp/user-1.pdf')`
+
+---
+
+### G. Membuat Class PSR-4 Modern (`App\Services\...`)
 Buat class di dalam `application/Services/` dan panggil langsung dengan `use App\Services\...` tanpa `$this->load->library()`.
 
 ---
 
-### F. Helper Global (`e()`, `csrf_field()`, `asset()`, `request_id()`, `log_context()`, `dd()`)
+### H. Helper Global (`e()`, `csrf_field()`, `asset()`, `client_ip()`, `request_id()`, `log_context()`, `dd()`)
 1. **`e($string)`**: Anti-XSS HTML escaping di View (`<?= e($user->name) ?>`).
 2. **`csrf_field()`**: Input hidden token CSRF untuk `<form method="POST">`.
 3. **`asset($path)`**: URL ke file statis di `public/assets/`.
-4. **`request_id()`**: Correlation ID unik per request (otomatis dikirim juga di header `X-Request-Id`).
-5. **`log_context($level, $message, $context)`**: Mencatat log terstruktur dalam format JSON beserta `request_id`.
-6. **`dump($var)` & `dd($var)`**: Debugging variabel bergaya modern.
+4. **`upload_path($path)` & `upload_url($path)`**: Path & URL ke file di `public/uploads/`.
+5. **`storage_path($path)`**: Path filesystem ke folder privat `storage/private/`.
+6. **`client_ip()`**: Mengambil IP asli pengunjung (mendukung normalisasi IPv6 & verifikasi CIDR Cloudflare jika `TRUST_CLOUDFLARE=true`).
+7. **`request_id()`**: Correlation ID unik per request (otomatis dikirim juga di header `X-Request-Id`).
+8. **`log_context($level, $message, $context)`**: Mencatat log terstruktur dalam format JSON beserta `request_id`.
+9. **`dump($var)` & `dd($var)`**: Debugging variabel bergaya modern.
 
 ---
 
-### G. Menjalankan Unit Test (PHPUnit)
+### I. Menjalankan Unit Test (PHPUnit)
 Untuk menjalankan seluruh pengujian di folder `tests/Unit/`:
 ```powershell
 composer test
@@ -279,7 +337,9 @@ composer test
 1. **CSRF Protection & Pengecualian REST API (`api/*`)**:
    - `CSRF_PROTECTION=true` aktif secara default di `.env`.
    - Semua route yang diawali `api/` sudah di-whitelist di `$config['csrf_exclude_uris'] = array('api/.*');` pada `application/config/config.php`.
-2. **Production Deployment Checklist**:
+2. **Cloudflare Real IP Anti-Spoofing (`TRUST_CLOUDFLARE`)**:
+   - Jika domain menggunakan proxy Cloudflare, ubah `TRUST_CLOUDFLARE=true` di `.env`. Helper `client_ip()` hanya akan membaca `HTTP_CF_CONNECTING_IP` jika `REMOTE_ADDR` terbukti berasal dari daftar CIDR resmi Cloudflare di `application/config/client_ip.php`.
+3. **Production Deployment Checklist**:
    - Gunakan `composer install --no-dev --optimize-autoloader` di server produksi.
    - Ubah `APP_ENV=production` dan `COOKIE_SECURE=true` (jika HTTPS) di `.env`.
    - Isi `APP_KEY` di `.env` dengan string acak sepanjang 32 karakter.

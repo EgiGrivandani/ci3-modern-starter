@@ -35,7 +35,8 @@
 		}
 	},
 	"scripts": {
-		"test": "phpunit --colors=always"
+		"test": "phpunit --colors=always",
+		"migrate": "php public/index.php migrate"
 	},
 	"config": {
 		"optimize-autoloader": true,

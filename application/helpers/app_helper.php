@@ -74,6 +74,65 @@ if (!function_exists('asset')) {
 	}
 }
 
+if (!function_exists('storage_path')) {
+	/**
+	 * Get the absolute filesystem path to the private storage directory (outside public/).
+	 * Use this for sensitive files (KTP, invoices, private documents) that must not have a direct public URL.
+	 *
+	 * Example: storage_path('invoices/inv-001.pdf')
+	 *
+	 * @param string $path
+	 * @return string
+	 */
+	function storage_path(string $path = ''): string
+	{
+		$base = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'private';
+		if ($path === '') {
+			return $base;
+		}
+
+		$normalized = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($path, '/\\'));
+		return $base . DIRECTORY_SEPARATOR . $normalized;
+	}
+}
+
+if (!function_exists('upload_path')) {
+	/**
+	 * Get the absolute filesystem path to the public uploads directory (public/uploads/).
+	 * Use this only for public media files (product images, banners, avatars).
+	 *
+	 * Example: upload_path('products/shoe.jpg')
+	 *
+	 * @param string $path
+	 * @return string
+	 */
+	function upload_path(string $path = ''): string
+	{
+		$base = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads';
+		if ($path === '') {
+			return $base;
+		}
+
+		$normalized = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, ltrim($path, '/\\'));
+		return $base . DIRECTORY_SEPARATOR . $normalized;
+	}
+}
+
+if (!function_exists('upload_url')) {
+	/**
+	 * Generate a full public URL to an uploaded file inside public/uploads/.
+	 *
+	 * Example: upload_url('products/shoe.jpg') -> http://example.test/uploads/products/shoe.jpg
+	 *
+	 * @param string $path
+	 * @return string
+	 */
+	function upload_url(string $path = ''): string
+	{
+		return base_url('uploads/' . ltrim($path, '/'));
+	}
+}
+
 if (!function_exists('csrf_field')) {
 	/**
 	 * Generate a hidden CSRF token input field for HTML forms (like @csrf in Laravel).

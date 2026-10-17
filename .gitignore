@@ -19,6 +19,14 @@ application/logs/*
 !application/logs/index.html
 !application/logs/.htaccess
 
+# Storage & Public Uploads
+storage/private/*
+!storage/private/index.html
+!storage/private/.htaccess
+public/uploads/*
+!public/uploads/index.html
+!public/uploads/.htaccess
+
 # Keep .htaccess inside application folders
 !application/*/.htaccess
 

@@ -254,7 +254,19 @@ public function store(): void
 }
 ```
 
-### C. Structured Logging dengan `log_context()`
+### C. Daftar Domain Exceptions Standar (`App\Exceptions\`)
+Gunakan exception yang sesuai di dalam Service atau Controller agar `handleException($e)` otomatis menghasilkan status HTTP dan `error_code` yang tepat:
+
+| Exception Class | HTTP Status | Default `error_code` | Kapan Digunakan? |
+| :--- | :--- | :--- | :--- |
+| `ValidationException` | `422` | `VALIDATION_ERROR` | Input form/JSON tidak valid (otomatis dilempar oleh `$this->validate()`) |
+| `UnauthorizedException` | `401` | `UNAUTHORIZED` | User belum login atau kredensial/token tidak valid |
+| `ForbiddenException` | `403` | `FORBIDDEN` | User sudah login tetapi tidak punya hak akses (*role/permission* ditolak) |
+| `NotFoundException` | `404` | `RESOURCE_NOT_FOUND` | Data yang dicari di database tidak ditemukan |
+| `TooManyRequestsException` | `429` | `TOO_MANY_REQUESTS` | Melewati batas Rate Limit (otomatis dilempar oleh `$this->throttle()`) |
+| `AppException` | `400` (Kustom) | `APP_ERROR` | Pelanggaran aturan bisnis umum (misal: saldo kurang, stok habis) |
+
+### D. Structured Logging dengan `log_context()`
 Gunakan `log_context($level, $message, $context)` agar setiap catatan log di `application/logs/` otomatis memiliki `request_id` yang sama dengan header `X-Request-Id` dan response JSON pengunjung:
 
 ```php
@@ -266,7 +278,7 @@ log_context('error', 'Gagal memproses pembayaran Midtrans', [
 
 ---
 
-## 8. Standar Keamanan (Security Baseline)
+## 8. Standar Keamanan & Manajemen File (Security Baseline)
 
 1. **Anti Mass-Assignment**: Setiap Model **wajib** mendefinisikan `protected array $fillable = [...]`.
 2. **Anti XSS di View**: Setiap pencetakan variabel di file `.php` view **wajib** dibungkus fungsi `<?= e($var) ?>`.
@@ -288,7 +300,11 @@ log_context('error', 'Gagal memproses pembayaran Midtrans', [
    ```
    > - Driver penyimpanan Rate Limit diatur melalui `CACHE_DRIVER` di `.env` (`file` secara default, atau ubah ke `redis` / `memcached` / `apcu` untuk skala besar tanpa perlu mengubah kode Controller).
    > - Jika aplikasi berada di balik proxy **Cloudflare**, ubah `TRUST_CLOUDFLARE=true` di `.env`. Fungsi `client_ip()` di `application/helpers/client_ip_helper.php` hanya akan mempercayai header `HTTP_CF_CONNECTING_IP` jika `REMOTE_ADDR` terbukti berasal dari daftar CIDR resmi Cloudflare di `application/config/client_ip.php` (anti IP-spoofing).
-
+6. **Pemisahan File Upload Publik vs Privat**:
+   - **File Publik** (gambar produk, avatar): Simpan di `upload_path('...')` (`public/uploads/`) dan tampilkan dengan `upload_url('...')`. Wajib memvalidasi ekstensi dan MIME type serta mengganti nama file menjadi acak (`encrypt_name = TRUE` di library `upload` CI3).
+   - **Dokumen Sensitif/Privat** (KTP, NPWP, bukti bayar, invoice): **Dilarang keras** disimpan di dalam folder `public/`. Wajib disimpan di luar webroot menggunakan `storage_path('...')` (`storage/private/`).
+7. **Perubahan Skema Database Wajib Melalui Migration**:
+   Jangan mengubah tabel secara manual di server tanpa jejak. Buat file migrasi bertipe *timestamp* di `application/migrations/` dan jalankan menggunakan CLI `composer migrate` (`php public/index.php migrate`).
 
 ---
 
@@ -302,3 +318,4 @@ Starter ini dilengkapi dengan konfigurasi **PHPUnit** di `phpunit.xml` dan `test
   ```
 - **Lokasi File Test**: `tests/Unit/*Test.php` (namespace `Tests\Unit`).
 - **Fokus Pengujian**: Utamakan menulis Unit Test untuk logika bisnis di `App\Services\`, helper di `app_helper.php`, dan validasi aturan domain yang berisiko tinggi.
+
