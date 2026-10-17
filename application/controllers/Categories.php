@@ -21,7 +21,12 @@ class Categories extends Public_Controller
 	public function index(): void
 	{
 		$this->allowMethods(['GET']);
-		$page = filter_var($this->input->get('page'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 1000000]]) ?: 1;
+		$page = filter_var($this->input->get('page'), FILTER_VALIDATE_INT, [
+			'options' => ['min_range' => 1, 'max_range' => 1000000],
+		]);
+		if ($page === false) {
+			$page = 1;
+		}
 		$this->renderLayout('categories/index', [
 			'title' => 'Kategori',
 			'pagination' => $this->categories->paginate(10, $page, [], 'id DESC'),
@@ -53,40 +58,68 @@ class Categories extends Public_Controller
 
 	protected function form(?object $category = null): void
 	{
-		$values = ['name' => $category->name ?? '', 'description' => $category->description ?? ''];
+		$values = [
+			'name' => $category->name ?? '',
+			'description' => $category->description ?? '',
+		];
+
+		if ($this->input->method() !== 'post') {
+			$this->renderForm($category, $values);
+			return;
+		}
+
 		$errors = [];
-		if ($this->input->method() === 'post') {
-			foreach ($values as $field => $value) {
-				$posted = $this->input->post($field);
-				$values[$field] = is_string($posted) ? $posted : '';
-				if ($posted !== null && !is_string($posted)) {
-					$errors[$field] = 'Isi dengan teks biasa.';
-				}
-			}
-			try {
-				if ($errors) {
-					throw new ValidationException($errors);
-				}
-				$validated = $this->validate([
-					'name' => ['label' => 'Nama', 'rules' => 'trim|required|max_length[80]'],
-					'description' => ['label' => 'Deskripsi', 'rules' => 'trim|max_length[500]'],
-				], $values);
-				$saved = $category
-					? $this->categories->update($category->id, $validated)
-					: $this->categories->create($validated);
-				if ($saved === false) {
-					$this->writeFailed();
-				}
-				$this->session->set_flashdata('success', 'Kategori berhasil disimpan.');
-				redirect('categories', 'location', 303);
-			} catch (ValidationException $e) {
-				$errors = $e->getErrors();
-				$this->output->set_status_header(422);
+		foreach (['name', 'description'] as $field) {
+			$posted = $this->input->post($field);
+			$values[$field] = '';
+
+			if (is_string($posted)) {
+				$values[$field] = $posted;
+			} elseif ($posted !== null) {
+				$errors[$field] = 'Isi dengan teks biasa.';
 			}
 		}
+
+		try {
+			if ($errors) {
+				throw new ValidationException($errors);
+			}
+
+			$validated = $this->validate([
+				'name' => ['label' => 'Nama', 'rules' => 'trim|required|max_length[80]'],
+				'description' => ['label' => 'Deskripsi', 'rules' => 'trim|max_length[500]'],
+			], $values);
+
+			if ($category !== null) {
+				$saved = $this->categories->update($category->id, $validated);
+			} else {
+				$saved = $this->categories->create($validated);
+			}
+
+			if ($saved === false) {
+				$this->writeFailed();
+			}
+
+			$this->session->set_flashdata('success', 'Kategori berhasil disimpan.');
+			redirect('categories', 'location', 303);
+		} catch (ValidationException $e) {
+			$this->output->set_status_header(422);
+			$this->renderForm($category, $values, $e->getErrors());
+		}
+	}
+
+	protected function renderForm(?object $category, array $values, array $errors = []): void
+	{
+		$title = 'Tambah kategori';
+		$action = 'categories/create';
+		if ($category !== null) {
+			$title = 'Edit kategori';
+			$action = 'categories/edit/' . $category->id;
+		}
+
 		$this->renderLayout('categories/form', [
-			'title' => $category ? 'Edit kategori' : 'Tambah kategori',
-			'action' => $category ? 'categories/edit/' . $category->id : 'categories/create',
+			'title' => $title,
+			'action' => $action,
 			'values' => $values,
 			'errors' => $errors,
 		]);
@@ -95,7 +128,11 @@ class Categories extends Public_Controller
 	protected function findCategory($id): object
 	{
 		$id = filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-		$category = $id ? $this->categories->find($id) : null;
+		if ($id === false) {
+			show_404();
+		}
+
+		$category = $this->categories->find($id);
 		if (!$category) {
 			show_404();
 		}

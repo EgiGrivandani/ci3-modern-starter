@@ -180,9 +180,22 @@ class RateLimiterService
 	protected function writeState($fp, array $state): void
 	{
 		$json = json_encode($state, JSON_THROW_ON_ERROR);
+		$length = strlen($json);
+
 		// Overwrite before truncating so a failed write is not mistaken for a new counter.
-		if (!rewind($fp) || fwrite($fp, $json) !== strlen($json)
-			|| !ftruncate($fp, strlen($json)) || !fflush($fp)) {
+		if (!rewind($fp)) {
+			throw new RuntimeException('Cannot persist rate limit counter.');
+		}
+
+		if (fwrite($fp, $json) !== $length) {
+			throw new RuntimeException('Cannot persist rate limit counter.');
+		}
+
+		if (!ftruncate($fp, $length)) {
+			throw new RuntimeException('Cannot persist rate limit counter.');
+		}
+
+		if (!fflush($fp)) {
 			throw new RuntimeException('Cannot persist rate limit counter.');
 		}
 	}

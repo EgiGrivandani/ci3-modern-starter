@@ -13,41 +13,73 @@ class AtomicRateLimitCache
 	public function __construct(string $driver)
 	{
 		$this->driver = $driver;
+
 		if ($driver === 'redis') {
-			if (!class_exists('Redis')) {
-				throw new RuntimeException('The Redis extension is unavailable.');
-			}
-			$this->client = new \Redis();
-			$socket = env('REDIS_SOCKET_TYPE', 'tcp') === 'unix';
-			if (!$this->client->connect(
-				$socket ? env('REDIS_SOCKET', '') : env('REDIS_HOST', '127.0.0.1'),
-				$socket ? 0 : (int) env('REDIS_PORT', 6379),
-				(float) env('REDIS_TIMEOUT', 1.5)
-			)) {
-				throw new RuntimeException('Cannot connect to Redis.');
-			}
-			$this->client->setOption(\Redis::OPT_READ_TIMEOUT, (float) env('REDIS_TIMEOUT', 1.5));
-			$password = env('REDIS_PASSWORD');
-			if ($password !== null && $password !== '' && !$this->client->auth($password)) {
+			$this->connectRedis();
+			return;
+		}
+
+		if ($driver === 'memcached') {
+			$this->connectMemcached();
+			return;
+		}
+
+		if ($driver !== 'apcu' || !function_exists('apcu_enabled') || !apcu_enabled()) {
+			throw new RuntimeException('The requested atomic cache is unavailable.');
+		}
+	}
+
+	private function connectRedis(): void
+	{
+		if (!class_exists('Redis')) {
+			throw new RuntimeException('The Redis extension is unavailable.');
+		}
+
+		$host = env('REDIS_HOST', '127.0.0.1');
+		$port = (int) env('REDIS_PORT', 6379);
+		$timeout = (float) env('REDIS_TIMEOUT', 1.5);
+		if (env('REDIS_SOCKET_TYPE', 'tcp') === 'unix') {
+			$host = env('REDIS_SOCKET', '');
+			$port = 0;
+		}
+
+		$this->client = new \Redis();
+		if (!$this->client->connect($host, $port, $timeout)) {
+			throw new RuntimeException('Cannot connect to Redis.');
+		}
+
+		$this->client->setOption(\Redis::OPT_READ_TIMEOUT, $timeout);
+		$password = env('REDIS_PASSWORD');
+		if ($password !== null && $password !== '') {
+			if (!$this->client->auth($password)) {
 				throw new RuntimeException('Redis authentication failed.');
 			}
-			if (!$this->client->select((int) env('REDIS_DATABASE', 0))) {
-				throw new RuntimeException('Cannot select Redis database.');
+		}
+
+		$database = (int) env('REDIS_DATABASE', 0);
+		if (!$this->client->select($database)) {
+			throw new RuntimeException('Cannot select Redis database.');
+		}
+	}
+
+	private function connectMemcached(): void
+	{
+		if (!class_exists('Memcached')) {
+			throw new RuntimeException('The Memcached extension is unavailable.');
+		}
+
+		$this->client = new \Memcached();
+		$config = [];
+		require APPPATH . 'config/memcached.php';
+
+		foreach ($config as $server) {
+			$host = $server['hostname'];
+			$port = (int) $server['port'];
+			$weight = (int) $server['weight'];
+
+			if (!$this->client->addServer($host, $port, $weight)) {
+				throw new RuntimeException('Cannot configure Memcached server.');
 			}
-		} elseif ($driver === 'memcached') {
-			if (!class_exists('Memcached')) {
-				throw new RuntimeException('The Memcached extension is unavailable.');
-			}
-			$this->client = new \Memcached();
-			$config = [];
-			require APPPATH . 'config/memcached.php';
-			foreach ($config as $server) {
-				if (!$this->client->addServer($server['hostname'], (int) $server['port'], (int) $server['weight'])) {
-					throw new RuntimeException('Cannot configure Memcached server.');
-				}
-			}
-		} elseif ($driver !== 'apcu' || !function_exists('apcu_enabled') || !apcu_enabled()) {
-			throw new RuntimeException('The requested atomic cache is unavailable.');
 		}
 	}
 
@@ -73,7 +105,12 @@ class AtomicRateLimitCache
 			return apcu_add($key, $value, $ttl);
 		}
 		// Memcached interprets expirations longer than 30 days as Unix timestamps.
-		$result = $this->client->add($key, $value, $ttl > 2592000 ? time() + $ttl : $ttl);
+		$expiration = $ttl;
+		if ($ttl > 2592000) {
+			$expiration = time() + $ttl;
+		}
+
+		$result = $this->client->add($key, $value, $expiration);
 		if (!$result && !in_array($this->client->getResultCode(), [\Memcached::RES_NOTSTORED, \Memcached::RES_DATA_EXISTS], true)) {
 			throw new RuntimeException('Memcached add failed.');
 		}
@@ -84,7 +121,13 @@ class AtomicRateLimitCache
 	{
 		if ($this->driver === 'redis') {
 			// INCR alone recreates an expired key without a TTL. Do not recreate it.
-			return $this->client->eval('if redis.call("EXISTS", KEYS[1]) == 0 then return false end return redis.call("INCR", KEYS[1])', [$key], 1);
+			$script = <<<'LUA'
+if redis.call("EXISTS", KEYS[1]) == 0 then
+    return false
+end
+return redis.call("INCR", KEYS[1])
+LUA;
+			return $this->client->eval($script, [$key], 1);
 		}
 		if ($this->driver === 'apcu') {
 			// apcu_inc can recreate a missing key. CAS preserves the existing TTL
