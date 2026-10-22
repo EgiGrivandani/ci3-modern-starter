@@ -1,6 +1,6 @@
-# CodeIgniter 3 Modern Starter Template (PHP 8.x – 8.5 Ready)
+# CodeIgniter 3 Modern Starter Template (PHP 8.5)
 
-Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimodifikasi dengan struktur, fitur, keamanan modern bergaya **Laravel**, serta fondasi **Engineering Standard berbasis DDIA (*Designing Data-Intensive Applications*) & Clean Architecture**. Template ini dirancang dengan prinsip **Reliable, Scalable, Maintainable, Clean, dan Secure**, serta kompatibel penuh dengan **PHP 8.0 hingga PHP 8.5+**.
+Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimodifikasi dengan struktur, fitur, keamanan modern bergaya **Laravel**, serta fondasi **Engineering Standard berbasis DDIA (*Designing Data-Intensive Applications*) & Clean Architecture**. Template ini dirancang dengan prinsip **Reliable, Scalable, Maintainable, Clean, dan Secure**, serta menargetkan **PHP seri 8.5 dengan patch minimal 8.5.12**.
 
 > **📘 Dokumen Standar Programming**: Baca panduan lengkap 6 prinsip penulisan kode, aturan arsitektur 3-Layer, penamaan kode, transaksi database, dan standar API di **[CODING_STANDARD.md](CODING_STANDARD.md)**.
 
@@ -31,7 +31,7 @@ Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimod
 
 | Fitur | CI3 Standar (v3.1.13) | Template CI3 Modern Ini |
 | :--- | :--- | :--- |
-| **Versi PHP** | Maksimal PHP 7.4 / 8.0 | **PHP 8.0 s/d PHP 8.5+** (PocketARC v3.4.5) |
+| **Versi PHP** | Maksimal PHP 7.4 / 8.0 | **PHP seri 8.5, minimal 8.5.12** (PocketARC v3.4.5) |
 | **Web Root (`index.php`)** | Di root folder (rawan terekspos) | Terpisah di dalam folder **`public/`** (seperti Laravel) |
 | **Konfigurasi Environment** | Hardcode di `config.php`, `database.php`, `email.php` | Menggunakan file **`.env`** (`vlucas/phpdotenv`) + fungsi `env()` |
 | **Base Controller** | Langsung `extends CI_Controller` | `MY_Controller`, `Public_Controller`, & `Auth_Controller` + `validate()`, `throttle()`, `success()`, `error()`, `handleException()` |
@@ -48,7 +48,7 @@ Starter template **CodeIgniter 3 (v3.4.5 - PocketARC Edition)** yang telah dimod
 
 ## 2. Spesifikasi & Tech Stack
 - **Framework Core**: [pocketarc/codeigniter](https://github.com/pocketarc/codeigniter) (`v3.4.5`)
-- **Kebutuhan PHP**: Minimal PHP `8.0` (Direkomendasikan **PHP 8.2 – 8.5**)
+- **Kebutuhan PHP**: Seri **8.5**, minimal **8.5.12**. Constraint Composer `~8.5.12` menerima patch berikutnya dalam seri 8.5, tetapi belum menerima 8.6. Pastikan PHP CLI dan PHP web server sama-sama memenuhi batas ini.
 - **Dependency Manager**: Composer
 - **Package Terpasang**:
   - `vlucas/phpdotenv` (`^5.6`) — Pembaca file `.env` standar industri.

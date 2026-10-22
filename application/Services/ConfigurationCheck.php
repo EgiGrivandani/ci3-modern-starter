@@ -22,10 +22,11 @@ class ConfigurationCheck
 	{
 		$environment = $settings['APP_ENV'] ?? '';
 		$validEnvironment = in_array($environment, ['development', 'testing', 'production'], true);
+		$supportedPhpVersion = PHP_VERSION_ID >= 80512 && PHP_VERSION_ID < 80600;
 
 		$checks = [];
 		$checks[] = $this->result($validEnvironment, 'APP_ENV harus development, testing, atau production.');
-		$checks[] = $this->result(PHP_VERSION_ID >= 80000, 'PHP minimal 8.0; gunakan versi yang diuji proyek ini.');
+		$checks[] = $this->result($supportedPhpVersion, 'PHP harus seri 8.5 dengan patch minimal 8.5.12, sesuai composer.json.');
 
 		foreach (['json', 'mbstring', 'session'] as $extension) {
 			$checks[] = $this->result(extension_loaded($extension), 'Ekstensi PHP ' . $extension . ' harus aktif.');
