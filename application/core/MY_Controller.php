@@ -187,8 +187,11 @@ class MY_Controller extends CI_Controller
 	 * Uses CACHE_DRIVER from .env ('file', 'redis', 'memcached', 'apcu').
 	 * Storage failure throws RateLimiterUnavailableException (503), without switching stores.
 	 *
-	 * Example:
-	 *   $this->throttle('login', 5, 60); // Max 5 attempts per 60 seconds
+	 * Identity is explicit: this method does not detect authenticated users.
+	 * For user limits, pass an ID from verified server-side authentication, never request input.
+	 * Examples (limits should be adjusted for each endpoint):
+	 *   $this->throttle('public_search', 60, 60); // Per client IP
+	 *   $this->throttle('create_order', 10, 60, 'user:' . $userId); // Per authenticated user
 	 *
 	 * @param string      $action       Action name (e.g. 'login', 'api_public')
 	 * @param int         $maxAttempts  Maximum requests allowed in the window

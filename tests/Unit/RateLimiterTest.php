@@ -25,6 +25,36 @@ class RateLimiterTest extends TestCase
 		rmdir($this->directory);
 	}
 
+	public function test_different_users_have_separate_quotas(): void
+	{
+		$limiter = new RateLimiterService('file', $this->directory);
+		$firstUser = $limiter->attempt('create_order:user:1', 1);
+		$secondUser = $limiter->attempt('create_order:user:2', 1);
+
+		$this->assertSame(0, $firstUser['remaining']);
+		$this->assertSame(0, $secondUser['remaining']);
+		$this->expectException(TooManyRequestsException::class);
+		$limiter->attempt('create_order:user:1', 1);
+	}
+
+	public function test_same_user_shares_quota_across_limiter_instances(): void
+	{
+		$firstRequest = new RateLimiterService('file', $this->directory);
+		$secondRequest = new RateLimiterService('file', $this->directory);
+
+		$this->assertSame(1, $firstRequest->attempt('create_order:user:1', 2)['remaining']);
+		$this->assertSame(0, $secondRequest->attempt('create_order:user:1', 2)['remaining']);
+		$this->expectException(TooManyRequestsException::class);
+		$secondRequest->attempt('create_order:user:1', 2);
+	}
+
+	public function test_different_actions_have_separate_quotas_for_the_same_user(): void
+	{
+		$limiter = new RateLimiterService('file', $this->directory);
+		$this->assertSame(0, $limiter->attempt('create_order:user:1', 1)['remaining']);
+		$this->assertSame(0, $limiter->attempt('export_order:user:1', 1)['remaining']);
+	}
+
 	public function test_unwritable_storage_stops_every_attempt(): void
 	{
 		file_put_contents($this->directory . '/blocker', 'file');

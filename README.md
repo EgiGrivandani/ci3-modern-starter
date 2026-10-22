@@ -238,6 +238,29 @@ Tersedia juga class Exception siap pakai di `App\Exceptions\`:
 
 Rate limiter memakai window yang dimulai pada percobaan pertama. Request yang ditolak tetap dihitung, tetapi tidak memperpanjang window. `clear($key)` mereset window tersebut.
 
+**Pilih identitas sesuai endpoint.** `throttle()` membagi kuota berdasarkan nama action dan identifier. Method ini hanya bekerja saat dipanggil dan tidak otomatis mendeteksi pengguna login.
+
+| Endpoint | Identitas untuk kuota |
+| :--- | :--- |
+| Publik / belum login | IP, default jika parameter keempat tidak diisi |
+| Setelah login | User ID dari session/token yang sudah diverifikasi server |
+| Login / reset password | Tentukan batas per IP dan per akun tujuan saat fitur dibuat |
+
+```php
+// Endpoint publik: kuota per IP.
+$this->throttle('public_search', 60, 60);
+
+// Endpoint setelah autentikasi berhasil: kuota per pengguna.
+// $userId berasal dari autentikasi server, bukan user_id dari request.
+$this->throttle('create_order', 10, 60, 'user:' . $userId);
+```
+
+Angka di atas adalah contoh; sesuaikan dengan biaya operasi dan kebutuhan endpoint. Gunakan identifier yang konsisten dan tidak kosong. Pengguna dengan action dan identifier sama berbagi kuota; identifier berbeda memiliki kuota terpisah. Untuk batas per pengguna, jangan sertakan IP dalam identifier agar pergantian jaringan tidak memberi kuota baru. Pada batas per IP, pengguna yang berbagi jaringan kantor atau operator seluler dapat berbagi kuota.
+
+Untuk login/reset password, bila perlu membatasi IP sekaligus akun tujuan, gunakan dua counter terpisah dengan nama action berbeda. Satu identifier gabungan `IP:akun` hanya membatasi pasangan tersebut. Atur batas per akun dengan hati-hati karena pihak lain dapat menghabiskan kuota akun korban. Kebijakan ini ditentukan saat fitur autentikasi dibuat di proyek turunan.
+
+Penyimpanan counter dipilih melalui `CACHE_DRIVER`:
+
 - `file`: memakai `flock` untuk menghitung request paralel dan mereset counter. Cocok untuk satu server dengan filesystem lokal; semua worker harus memakai direktori yang sama.
 - `redis` / `memcached`: memakai operasi native add-if-absent dan increment atomik, terpisah dari `CI_Cache`. Membutuhkan ekstensi PHP `redis` / `memcached` dan layanan yang tersedia. Redis memakai konfigurasi `REDIS_*` pada `.env`; Memcached memakai `application/config/memcached.php`. Semua instance aplikasi harus memakai backend yang sama.
 - `apcu`: memakai add-if-absent dan compare-and-swap atomik. Membutuhkan ekstensi APCu aktif; counter hanya dibagi oleh worker yang menggunakan segmen APCu yang sama, bukan antarserver.
